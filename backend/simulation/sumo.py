@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import math
 import os
 import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import IO
+from typing import IO, Any
 
 import sumolib
 import traci
@@ -37,6 +39,15 @@ STEP_LENGTH = 0.1  # s, fixed for every run (CLAUDE.md section 6)
 CONNECT_TIMEOUT_S = 10.0
 SHUTDOWN_TIMEOUT_S = 5.0
 _TLS_VARS = (tc.TL_RED_YELLOW_GREEN_STATE, tc.TL_CURRENT_PHASE, tc.TL_CURRENT_PROGRAM)
+_VEHICLE_VARS = (
+    tc.VAR_POSITION,
+    tc.VAR_ANGLE,
+    tc.VAR_SPEED,
+    tc.VAR_TYPE,
+    tc.VAR_ROAD_ID,
+    tc.VAR_LANE_INDEX,
+    tc.VAR_LENGTH,
+)
 
 
 class SumoNotFoundError(RuntimeError):
@@ -98,10 +109,29 @@ class SignalState:
 
 
 @dataclass(frozen=True)
+class VehicleState:
+    id: str
+    type: str  # vType id, doubles as the 3D asset key
+    x: float  # m, vehicle centre (SUMO itself reports the front bumper)
+    y: float
+    angle: float  # deg clockwise from north
+    speed: float  # m/s
+    edge: str  # ":<junction>_<n>" while crossing a junction
+    lane: int  # 0 = curb lane
+
+
+@dataclass(frozen=True)
 class Snapshot:
     time: float  # s
-    vehicle_count: int
     signals: tuple[SignalState, ...]
+    vehicles: tuple[VehicleState, ...]
+
+    @property
+    def vehicle_count(self) -> int:
+        return len(self.vehicles)
+
+    def vehicle(self, vehicle_id: str) -> VehicleState | None:
+        return next((v for v in self.vehicles if v.id == vehicle_id), None)
 
 
 class SumoSimulation:
@@ -115,6 +145,7 @@ class SumoSimulation:
         self._conn: Connection | None = None
         self._log: IO[bytes] | None = None
         self._tls_ids: tuple[str, ...] = ()
+        self._context_anchor = ""
 
     # ---- lifecycle -------------------------------------------------------
     def start(self) -> None:
@@ -136,6 +167,7 @@ class SumoSimulation:
             self._tls_ids = tuple(sorted(self._conn.trafficlight.getIDList()))
             for tls_id in self._tls_ids:
                 self._conn.trafficlight.subscribe(tls_id, _TLS_VARS)
+            self._subscribe_all_vehicles(self._conn)
         except BaseException:
             self.close()
             raise
@@ -155,6 +187,23 @@ class SumoSimulation:
                         f"{CONNECT_TIMEOUT_S:g} s:\n{self._log_tail()}"
                     ) from exc
                 time.sleep(0.05)
+
+    def _subscribe_all_vehicles(self, conn: Connection) -> None:
+        """One context subscription around the central junction covers the whole map, so
+        every vehicle's state arrives with each simulationStep() reply (no per-vehicle calls)."""
+        (xmin, ymin), (xmax, ymax) = conn.simulation.getNetBoundary()
+        cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
+        junctions = [j for j in conn.junction.getIDList() if not j.startswith(":")]
+
+        def dist_to_centre(junction_id: str) -> float:
+            x, y = conn.junction.getPosition(junction_id)
+            return math.hypot(x - cx, y - cy)
+
+        self._context_anchor = min(junctions, key=dist_to_centre)
+        radius = math.hypot(xmax - xmin, ymax - ymin)
+        conn.junction.subscribeContext(
+            self._context_anchor, tc.CMD_GET_VEHICLE_VARIABLE, radius, _VEHICLE_VARS
+        )
 
     def close(self) -> None:
         """Idempotent. TraCI close, then wait, then kill: no sumo process outlives this."""
@@ -198,6 +247,11 @@ class SumoSimulation:
     def tls_ids(self) -> tuple[str, ...]:
         return self._tls_ids
 
+    @property
+    def connection(self) -> Connection:
+        """For other modules of the simulation layer only (CLAUDE.md section 6)."""
+        return self._require_conn()
+
     def step(self) -> Snapshot:
         """Advance one STEP_LENGTH and return the new state."""
         self._require_conn().simulationStep()
@@ -215,11 +269,9 @@ class SumoSimulation:
             )
             for tls_id in self._tls_ids
         )
-        return Snapshot(
-            time=conn.simulation.getTime(),
-            vehicle_count=conn.vehicle.getIDCount(),
-            signals=signals,
-        )
+        context = conn.junction.getContextSubscriptionResults(self._context_anchor) or {}
+        vehicles = tuple(_vehicle_state(vid, context[vid]) for vid in sorted(context))
+        return Snapshot(time=conn.simulation.getTime(), signals=signals, vehicles=vehicles)
 
     def signal_program(self, tls_id: str) -> tuple[tuple[str, float], ...]:
         """(state, duration s) for each phase of the signal's active program."""
@@ -243,6 +295,24 @@ class SumoSimulation:
         except OSError:
             return "(no SUMO log)"
         return "\n".join(text.splitlines()[-lines:]) or "(SUMO log is empty)"
+
+
+def _vehicle_state(vehicle_id: str, values: Mapping[int, Any]) -> VehicleState:
+    """TraCI subscription values (untyped) -> VehicleState, front bumper -> centre."""
+    x, y = values[tc.VAR_POSITION]
+    angle = float(values[tc.VAR_ANGLE])
+    half = float(values[tc.VAR_LENGTH]) / 2
+    heading = math.radians(angle)  # SUMO: clockwise from north, so direction = (sin, cos)
+    return VehicleState(
+        id=vehicle_id,
+        type=str(values[tc.VAR_TYPE]),
+        x=x - half * math.sin(heading),
+        y=y - half * math.cos(heading),
+        angle=angle,
+        speed=float(values[tc.VAR_SPEED]),
+        edge=str(values[tc.VAR_ROAD_ID]),
+        lane=int(values[tc.VAR_LANE_INDEX]),
+    )
 
 
 def format_snapshot(snap: Snapshot) -> str:
