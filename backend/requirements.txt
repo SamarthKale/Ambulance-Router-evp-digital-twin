@@ -1,0 +1,11 @@
+# SUMO itself is the native Windows install (SUMO_HOME). traci and sumolib are its
+# Python clients, pinned to the installed SUMO version (sumo --version).
+traci==1.27.1
+sumolib==1.27.1
+python-dotenv==1.2.4
+
+# test / lint
+pytest==9.1.1
+psutil==7.2.2
+ruff==0.16.10
+black==26.10.0

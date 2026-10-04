@@ -1,0 +1,21 @@
+[project]
+name = "emergencyflow-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["slow: runs a full simulated hour headless (~10-20 s)"]
+
+[tool.ruff]
+line-length = 100
+# Reference demo kept byte-identical until it is integrated in Sprint 2.
+extend-exclude = ["simulation/manual_control.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.black]
+line-length = 100
+extend-exclude = "simulation/manual_control\\.py"

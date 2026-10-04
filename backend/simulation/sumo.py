@@ -1,0 +1,281 @@
+"""SUMO process and TraCI connection lifecycle (headless by default).
+
+Only the simulation/ layer imports traci (CLAUDE.md section 6). This module owns the
+SUMO subprocess so it can guarantee shutdown: close() asks TraCI to close, waits,
+then kills, and it also runs from __exit__ and atexit. Each instance uses its own
+unlabeled TraCI connection object, never the global traci module state, so several
+simulations can run side by side (batch experiments, ghost run).
+
+CLI (from backend/):
+    .venv\\Scripts\\python.exe -m simulation.sumo --steps 600 --print-every 50
+"""
+
+from __future__ import annotations
+
+import argparse
+import atexit
+import os
+import shutil
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from types import TracebackType
+from typing import IO
+
+import sumolib
+import traci
+from dotenv import load_dotenv
+from traci import constants as tc
+from traci.connection import Connection
+from traci.exceptions import FatalTraCIError, TraCIException
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCENARIOS_DIR = REPO_ROOT / "scenarios"
+STEP_LENGTH = 0.1  # s, fixed for every run (CLAUDE.md section 6)
+CONNECT_TIMEOUT_S = 10.0
+SHUTDOWN_TIMEOUT_S = 5.0
+_TLS_VARS = (tc.TL_RED_YELLOW_GREEN_STATE, tc.TL_CURRENT_PHASE, tc.TL_CURRENT_PROGRAM)
+
+
+class SumoNotFoundError(RuntimeError):
+    """The SUMO binary could not be located."""
+
+
+class SumoStartError(RuntimeError):
+    """SUMO exited, or never accepted the TraCI connection."""
+
+
+def find_sumo_binary(name: str = "sumo") -> Path:
+    """Resolve a SUMO executable via SUMO_HOME (system or repo .env), then PATH."""
+    load_dotenv(REPO_ROOT / ".env")  # does not override variables already set
+    candidate = sumolib.checkBinary(name)  # SUMO_HOME/bin/<name>, else the bare name
+    resolved = candidate if os.path.isfile(candidate) else shutil.which(candidate)
+    if resolved is None:
+        raise SumoNotFoundError(
+            f"Could not find '{name}'. Set SUMO_HOME to your SUMO install folder "
+            f"(system-wide or in {REPO_ROOT / '.env'}), or put its bin folder on PATH."
+        )
+    return Path(resolved)
+
+
+@dataclass(frozen=True)
+class SumoConfig:
+    scenario: str = "grid2x2"  # folder under scenarios/
+    seed: int = 42
+    scale: float = 1.0  # demand multiplier (1.5 = heavy-traffic demo)
+    gui: bool = False  # sumo-gui is for debugging only, never the product UI
+    log_path: Path = REPO_ROOT / "logs" / "sumo.log"
+    extra_args: tuple[str, ...] = ()
+
+    @property
+    def sumocfg(self) -> Path:
+        return SCENARIOS_DIR / self.scenario / "simulation.sumocfg"
+
+    def command(self, binary: Path, port: int) -> list[str]:
+        # fmt: off
+        cmd = [
+            str(binary),
+            "-c", str(self.sumocfg),
+            "--remote-port", str(port),
+            "--seed", str(self.seed),
+            "--scale", str(self.scale),
+            "--step-length", str(STEP_LENGTH),
+        ]
+        # fmt: on
+        if self.gui:
+            cmd += ["--start", "--quit-on-end"]
+        return cmd + list(self.extra_args)
+
+
+@dataclass(frozen=True)
+class SignalState:
+    tls_id: str
+    state: str  # one SUMO signal char per controlled link (G g y r ...)
+    phase: int
+    program: str
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    time: float  # s
+    vehicle_count: int
+    signals: tuple[SignalState, ...]
+
+
+class SumoSimulation:
+    """One SUMO instance driven over TraCI. Use as a context manager."""
+
+    def __init__(self, config: SumoConfig | None = None) -> None:
+        self.config = config or SumoConfig()
+        self.sumo_version = ""
+        self.exit_code: int | None = None
+        self._proc: subprocess.Popen[bytes] | None = None
+        self._conn: Connection | None = None
+        self._log: IO[bytes] | None = None
+        self._tls_ids: tuple[str, ...] = ()
+
+    # ---- lifecycle -------------------------------------------------------
+    def start(self) -> None:
+        if self._proc is not None:
+            raise RuntimeError("simulation already started")
+        if not self.config.sumocfg.is_file():
+            raise FileNotFoundError(f"Scenario config not found: {self.config.sumocfg}")
+        binary = find_sumo_binary("sumo-gui" if self.config.gui else "sumo")
+        port = sumolib.miscutils.getFreeSocketPort()
+        self.config.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._log = open(self.config.log_path, "wb")
+        self._proc = subprocess.Popen(
+            self.config.command(binary, port), stdout=self._log, stderr=subprocess.STDOUT
+        )
+        atexit.register(self.close)
+        try:
+            self._conn = self._connect(port)
+            self.sumo_version = self._conn.getVersion()[1]
+            self._tls_ids = tuple(sorted(self._conn.trafficlight.getIDList()))
+            for tls_id in self._tls_ids:
+                self._conn.trafficlight.subscribe(tls_id, _TLS_VARS)
+        except BaseException:
+            self.close()
+            raise
+
+    def _connect(self, port: int) -> Connection:
+        deadline = time.monotonic() + CONNECT_TIMEOUT_S
+        while True:
+            try:
+                # numRetries=0: we retry here, quietly, with our own timeout.
+                return traci.connect(port=port, numRetries=0, proc=self._proc)
+            except TraCIException as exc:  # raised when SUMO already exited
+                raise SumoStartError(f"SUMO exited during startup:\n{self._log_tail()}") from exc
+            except FatalTraCIError as exc:
+                if time.monotonic() > deadline:
+                    raise SumoStartError(
+                        f"SUMO did not accept TraCI on port {port} within "
+                        f"{CONNECT_TIMEOUT_S:g} s:\n{self._log_tail()}"
+                    ) from exc
+                time.sleep(0.05)
+
+    def close(self) -> None:
+        """Idempotent. TraCI close, then wait, then kill: no sumo process outlives this."""
+        atexit.unregister(self.close)
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            try:
+                conn.close(wait=False)
+            except (TraCIException, FatalTraCIError, OSError):
+                pass  # SUMO already gone; the process is still reaped below
+        proc, self._proc = self._proc, None
+        if proc is not None:
+            try:
+                proc.wait(timeout=SHUTDOWN_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=SHUTDOWN_TIMEOUT_S)
+            self.exit_code = proc.returncode
+        if self._log is not None:
+            self._log.close()
+            self._log = None
+
+    def __enter__(self) -> SumoSimulation:
+        self.start()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    # ---- state -------------------------------------------------------------
+    @property
+    def pid(self) -> int | None:
+        return self._proc.pid if self._proc is not None else None
+
+    @property
+    def tls_ids(self) -> tuple[str, ...]:
+        return self._tls_ids
+
+    def step(self) -> Snapshot:
+        """Advance one STEP_LENGTH and return the new state."""
+        self._require_conn().simulationStep()
+        return self.snapshot()
+
+    def snapshot(self) -> Snapshot:
+        conn = self._require_conn()
+        results = conn.trafficlight.getAllSubscriptionResults()
+        signals = tuple(
+            SignalState(
+                tls_id=tls_id,
+                state=results[tls_id][tc.TL_RED_YELLOW_GREEN_STATE],
+                phase=results[tls_id][tc.TL_CURRENT_PHASE],
+                program=results[tls_id][tc.TL_CURRENT_PROGRAM],
+            )
+            for tls_id in self._tls_ids
+        )
+        return Snapshot(
+            time=conn.simulation.getTime(),
+            vehicle_count=conn.vehicle.getIDCount(),
+            signals=signals,
+        )
+
+    def signal_program(self, tls_id: str) -> tuple[tuple[str, float], ...]:
+        """(state, duration s) for each phase of the signal's active program."""
+        conn = self._require_conn()
+        active = conn.trafficlight.getProgram(tls_id)
+        logic = next(
+            lg for lg in conn.trafficlight.getAllProgramLogics(tls_id) if lg.programID == active
+        )
+        return tuple((p.state, float(p.duration)) for p in logic.phases)
+
+    def _require_conn(self) -> Connection:
+        if self._conn is None:
+            raise RuntimeError("simulation is not running; call start() or use 'with'")
+        return self._conn
+
+    def _log_tail(self, lines: int = 20) -> str:
+        if self._log is not None:
+            self._log.flush()
+        try:
+            text = self.config.log_path.read_text(errors="replace")
+        except OSError:
+            return "(no SUMO log)"
+        return "\n".join(text.splitlines()[-lines:]) or "(SUMO log is empty)"
+
+
+def format_snapshot(snap: Snapshot) -> str:
+    signals = "  ".join(f"{s.tls_id}={s.state}(p{s.phase})" for s in snap.signals)
+    return f"t={snap.time:7.1f}s  vehicles={snap.vehicle_count:4d}  {signals}"
+
+
+def main(argv: list[str] | None = None) -> int:
+    load_dotenv(REPO_ROOT / ".env")
+    parser = argparse.ArgumentParser(
+        description="Run SUMO via TraCI and print vehicle count and signal states."
+    )
+    parser.add_argument("--scenario", default=os.environ.get("EF_SCENARIO", "grid2x2"))
+    parser.add_argument("--seed", type=int, default=int(os.environ.get("EF_SEED", "42")))
+    parser.add_argument("--scale", type=float, default=1.0, help="demand multiplier")
+    parser.add_argument("--steps", type=int, default=600, help=f"{STEP_LENGTH} s per step")
+    parser.add_argument("--print-every", type=int, default=50)
+    parser.add_argument("--gui", action="store_true", help="sumo-gui, for debugging only")
+    args = parser.parse_args(argv)
+
+    config = SumoConfig(scenario=args.scenario, seed=args.seed, scale=args.scale, gui=args.gui)
+    with SumoSimulation(config) as sim:
+        print(
+            f"{sim.sumo_version} | scenario {config.scenario} | seed {config.seed} | "
+            f"scale {config.scale} | step {STEP_LENGTH} s | sumo pid {sim.pid}"
+        )
+        for i in range(1, args.steps + 1):
+            snap = sim.step()
+            if i % args.print_every == 0 or i == args.steps:
+                print(format_snapshot(snap))
+    print(f"SUMO closed (exit code {sim.exit_code}).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
