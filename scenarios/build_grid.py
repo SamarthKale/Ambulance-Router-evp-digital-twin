@@ -14,6 +14,7 @@ Map-edge nodes are n<col>/s<col>/w<row>/e<row>. Edges are <from>_<to>.
 from __future__ import annotations
 
 import argparse
+import json
 import string
 import subprocess
 import sys
@@ -37,6 +38,15 @@ VTYPES: tuple[tuple[str, str, float, float, float], ...] = (
     ("truck", "truck", 7.5, 2.4, 0.0),
     ("bus", "bus", 12.0, 2.5, 0.0),
 )
+
+# Manually driven ambulance. speedFactor 1.6 lets it reach the 22 m/s cap on 50 km/h roads;
+# accel/decel match the manual-control constants; no driver randomness (sigma, speedDev).
+AMBULANCE_VTYPE = (
+    '<vType id="ambulance" vClass="emergency" length="6.0" width="2.2" maxSpeed="22.0" '
+    'speedFactor="1.6" speedDev="0" accel="3.5" decel="6.0" emergencyDecel="9.0" sigma="0" '
+    'guiShape="emergency"/>'
+)
+HOSPITAL_STOP_BEFORE_END = 15.0  # m before the end of the hospital edge
 
 
 @dataclass(frozen=True)
@@ -151,6 +161,7 @@ def write_routes(spec: GridSpec, out: Path, roads: list[tuple[str, str, str]]) -
     lines.append(
         f'    <vTypeDistribution id="background" vTypes="{ids}" probabilities="{shares}"/>'
     )
+    lines.append(f"    {AMBULANCE_VTYPE}")
     for src, entry, _ in roads:
         for dst, _, exit_edge in roads:
             if src == dst:
@@ -195,6 +206,16 @@ def write_sumocfg(spec: GridSpec, out: Path) -> None:
 """)
 
 
+def write_scenario(spec: GridSpec, out: Path) -> None:
+    """Depot (west edge, bottom row) and hospital (east edge, top row): a diagonal trip."""
+    last_col, top = string.ascii_uppercase[spec.nx - 1], spec.ny - 1
+    scenario = {
+        "depot": {"edge": "w0_A0", "pos": 0.0},
+        "hospital": {"edge": f"{last_col}{top}_e{top}", "stopBeforeEnd": HOSPITAL_STOP_BEFORE_END},
+    }
+    (out / "scenario.json").write_text(json.dumps(scenario, indent=2) + "\n")
+
+
 def describe_signals(out: Path) -> None:
     net = sumolib.net.readNet(str(out / "network.net.xml"), withPrograms=True)
     for tls in sorted(net.getTrafficLights(), key=lambda t: t.getID()):
@@ -228,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     run_netconvert(spec, out)
     write_routes(spec, out, map_edge_roads(nodes, links))
     write_sumocfg(spec, out)
+    write_scenario(spec, out)
     print(f"Built {out}")
     describe_signals(out)
     return 0

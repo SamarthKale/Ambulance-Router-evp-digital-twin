@@ -12,13 +12,14 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | Sprint | Deliverable | State |
 |---|---|---|
 | 1 | SUMO world: 2x2 signalized grid (left-hand traffic), seeded background traffic, clean TraCI lifecycle | done |
-| 2 | Ambulance + manual WASD control + minimal WebSocket and top-down view | next |
+| 2 | Ambulance + manual WASD driving, FastAPI WebSocket, React Three Fiber top-down view | done |
+| 3 | Safety controller + BASIC signal preemption | next |
 
 ## Prerequisites (Windows)
 
 - **SUMO 1.27.1** (Windows installer), with `SUMO_HOME` set (e.g. `C:\Program Files (x86)\Eclipse\Sumo`) and `%SUMO_HOME%\bin` on `PATH`.
   Terminals and VS Code windows opened **before** SUMO was installed don't see these variables. Restart them, or use the `.env` file below.
-- **Python 3.13** (3.11+ works), **Git** with **Git LFS**. Node.js LTS is needed from Sprint 2.
+- **Python 3.13** (3.11+ works), **Node.js LTS**, **Git** with **Git LFS**.
 
 ## Setup (PowerShell, from the repo root)
 
@@ -27,11 +28,46 @@ git lfs install                                   # once per machine
 py -3.13 -m venv backend\.venv
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 Copy-Item .env.example .env                       # local settings, git-ignored; edit SUMO_HOME if needed
+cd frontend; npm install; cd ..
 ```
 
 The commands call `.venv\Scripts\python.exe` directly, so you don't need to activate the venv. That avoids PowerShell's script execution policy. In VS Code, pick `backend\.venv\Scripts\python.exe` as the interpreter so imports resolve.
 
-## Run
+## Drive the ambulance
+
+Use two terminals.
+
+```powershell
+# terminal 1: backend (starts SUMO headless, 10 Hz)
+cd backend
+.venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000
+
+# terminal 2: frontend
+cd frontend
+npm run dev
+```
+
+Open **http://localhost:5173**, click **Dispatch ambulance** and drive from the depot (west) to the hospital (east, top road).
+
+| Key | Action |
+|---|---|
+| W / S | Throttle / brake (hold) |
+| A / D | Turn left / right at the next junction (tap). A turn pressed inside a junction is queued for the next one |
+| Q / E | Change lane left / right. Left-hand traffic: the curb lane is on the left |
+| F | Follow the ambulance on/off (mouse: drag to pan, wheel to zoom) |
+
+How driving works:
+- The ambulance obeys red lights and right of way; signal preemption arrives in Sprint 3.
+- Its top speed is capped at 80 km/h.
+- If drive input stops for 0.5 s (window loses focus, tab hidden), it coasts to a stop.
+- When a request can't be done, the HUD says why (e.g. "too late to turn right at A0").
+
+Measured on this machine (Edge, RTX 4060 laptop):
+- 240 FPS.
+- 28–57 ms median from keypress to the first simulation tick that responds.
+- 100 ms median tick interval.
+
+## Headless run
 
 ```powershell
 cd backend
@@ -56,13 +92,18 @@ Options:
 - `--steps N`: number of 0.1 s steps.
 - `--gui`: `sumo-gui`, for debugging only. It is not the product UI.
 
-## Tests and lint (from `backend\`)
+## Tests and lint
 
 ```powershell
-.venv\Scripts\python.exe -m pytest -q                  # ~20 s, includes a 1-hour heavy-traffic run
-.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~6 s
+cd backend
+.venv\Scripts\python.exe -m pytest -q                  # ~45 s, includes a 1-hour heavy-traffic run
+.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~30 s
 .venv\Scripts\ruff.exe check --config pyproject.toml . ..\scenarios
 .venv\Scripts\black.exe --config pyproject.toml --check . ..\scenarios
+
+cd ..\frontend
+npm run test        # Vitest: coordinates, key mapping, store, protocol parsing, road geometry
+npm run build       # strict TypeScript check + production build
 ```
 
 ## Scenario: `scenarios/grid2x2`
@@ -98,3 +139,6 @@ Regenerate (from `backend\`):
 - **`Could not find 'sumo'`**: set `SUMO_HOME` in `.env`, or open a new terminal after installing SUMO.
 - **`Warning: Environment variable SUMO_HOME is not set properly, disabling XML validation`**: harmless, but it means that terminal can't see `SUMO_HOME`. Restart the terminal, or run through `simulation.sumo`, which loads `.env`.
 - **Leftover `sumo.exe`**: shouldn't happen. The backend owns the SUMO process and kills it on exit, and SUMO quits by itself if its client dies. Check with `Get-Process sumo`.
+- **Page says "Backend not reachable"**: start the backend first (terminal 1). `http://127.0.0.1:8000/api/health` should report `running`.
+- **Open `http://localhost:5173`, not `127.0.0.1:5173`**: Vite listens on `localhost`, which Windows resolves to IPv6 `::1`.
+- **Traffic thins out after an hour**: background traffic is generated for 3600 s of simulated time. Press **Reset**.

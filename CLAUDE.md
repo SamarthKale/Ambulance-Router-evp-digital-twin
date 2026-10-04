@@ -28,18 +28,24 @@ SUMO  <--TraCI-->  Python engine (FastAPI)  <--WebSocket-->  React + R3F + Three
 4. **Never claim realistic vehicle physics.** SUMO is a traffic simulator, not a driving-physics engine. User "driving" is interactive control of a simulated vehicle (lane/route/speed intent).
 5. **Three signal modes, always comparable:** `OFF` (normal signals), `BASIC` (rule-based preemption), `COORD` (coordinated: queue-aware preemption timing + downstream preparation + shortest-path routing). Every feature must work across modes so experiments stay fair.
 6. **Control mode: MANUAL (v1 default).** The user drives the ambulance with the keyboard (W/S speed, A/D turn choice at the next junction, Q/E lane change). COORD only controls signals and gives **advisory** routing: the suggested route and ETA are drawn as an overlay and "route compromised" is flagged on incidents, but it never steers the ambulance. Batch experiments (section 14) use an autopilot that follows the suggested route so runs are reproducible. A/D are turn intents, not continuous steering.
-   - Implementation: `backend/simulation/manual_control.py` and `frontend/src/simulation/useManualDrive.ts`. Both are **untested reference demos**, moved unchanged in Sprint 1. They do not constrain the implementation. Known issues to fix in Sprint 2:
-     - `handle()` calls TraCI from the WebSocket side, which is not thread-safe.
-     - It uses the global `traci` module.
-     - Q/E are inverted under left-hand traffic.
-     - The ambulance gets stuck at map-edge dead ends.
-     - Turn presses inside a junction are dropped.
-     - Infeasible late turns can stall the ambulance at the stop line.
-     - 22 m/s is unreachable without an ambulance vType `speedFactor` of about 1.6.
-     - The frontend hook should use `e.code` instead of `e.key`, and it needs a stable `send`.
-   - Backend step order: apply queued commands, `manual.step(dt)`, `simulationStep()`, publish snapshot, broadcast.
-   - Safety: in live mode speed mode stays at 31 (red lights and right-of-way respected), speed is capped at 22 m/s, and a deadman timer zeroes input if drive messages stop for 0.5 s. The ambulance vType sets `speedFactor`/`accel`/`decel` so the cap and the ACCEL/BRAKE constants are actually reachable.
-7. **Single TraCI owner.** One simulation thread owns the TraCI connection. WebSocket handlers only enqueue commands; the sim thread applies them before each step and publishes an immutable snapshot that the async side broadcasts. TraCI is not thread-safe.
+   - Implementation: `backend/simulation/manual_control.py` and `frontend/src/simulation/useManualDrive.ts`, rewritten in Sprint 2 from the reference demos. Behaviour:
+     - Commands only record intent; the engine thread applies them.
+     - The TraCI connection is injected.
+     - Q/E follow the driving side: lane 0 is the curb lane, which is on the left in left-hand traffic.
+     - A turn pressed inside a junction is queued for the next one.
+     - An impossible or too-late turn is rejected with a reason, and the plan is kept.
+     - A U-turn is taken when it is the only way on (map edge).
+     - A Q/E press into an occupied lane is held for 3 s, and the ack says "waiting for a gap".
+     - Lane-change mode 513: only route-required lane changes happen automatically, and Q/E respect other vehicles' gaps.
+     - On the hospital edge the ambulance parks at the hospital stop (status `arrived`; mission time frozen).
+     - The frontend uses physical key codes (`e.code`) and a stable `send`; keys are ignored while typing, and input is released on blur or a hidden tab.
+   - Ambulance: vType `ambulance` (vClass emergency, 6 m, accel 3.5, decel 6, `maxSpeed` 22, `speedFactor` 1.6, sigma 0). It spawns at the depot in the curb lane. "Dispatch" while it is on the road respawns it.
+   - Backend step order (`engine.tick`): apply queued commands, `manual.step(dt)`, `simulationStep()`, `manual.observe(...)`, publish state.
+   - Safety: speed mode stays at 31 (red lights and right of way respected; tested), speed is capped at 22 m/s (tested), and a deadman timer zeroes input if drive messages stop for 0.5 s (tested with an injected clock).
+7. **Single TraCI owner.** One simulation thread (`backend/simulation/engine.py`) owns the TraCI connection, because TraCI is not thread-safe.
+   - WebSocket handlers only `submit()` commands, which return a future. The engine thread applies them before each step and publishes an immutable `EngineState`. The event loop serializes it once and fans it out.
+   - Each client gets every ack but only the newest tick, so a slow client skips frames instead of lagging.
+   - If SUMO crashes, the engine records the error (`/api/health`) and restarts SUMO after 1 s (tested).
 
 ## 3. Tech stack
 
@@ -65,18 +71,21 @@ sparkathon26/                      (EmergencyFlow AI)
 ├── .env.example                   # copy to .env (git-ignored): SUMO_HOME, EF_SCENARIO, EF_SEED
 ├── frontend/
 │   ├── src/
-│   │   ├── components/            # City3D, Ambulance, TrafficLight, Vehicle, Hospital, Asset
-│   │   ├── simulation/            # websocket.ts, state.ts (Zustand), coords.ts, useManualDrive.ts
-│   │   ├── assets/                # manifest.ts (asset key -> file, fit, offsets, placeholder)
-│   │   ├── dashboard/             # HUD, telemetry, controls
-│   │   └── app/
+│   │   ├── components/            # TopDownScene, geometry (road ribbons), Label, vehicleStyles;
+│   │   │                          # later City3D, Ambulance, TrafficLight, Vehicle, Hospital, Asset
+│   │   ├── simulation/            # websocket.ts, state.ts (protocol types + Zustand), coords.ts,
+│   │   │                          # useManualDrive.ts (+ *.test.ts)
+│   │   ├── assets/                # manifest.ts (asset key -> file, fit, offsets, placeholder), Sprint 5
+│   │   ├── dashboard/             # Hud.tsx
+│   │   └── app/                   # App.tsx, app.css
 │   ├── scripts/                   # check-assets.ts (when the first real model arrives)
 │   └── public/models/             # *.glb (Git LFS)
 ├── backend/
 │   ├── requirements.txt           # pinned
 │   ├── pyproject.toml             # pytest, ruff, black config
-│   ├── api/                       # routes.py, websocket.py
-│   ├── simulation/                # sumo.py, manual_control.py, vehicle.py, traffic_lights.py, network.py
+│   ├── api/                       # protocol.py (v1 models), routes.py, websocket.py
+│   ├── simulation/                # sumo.py, engine.py, manual_control.py, vehicle.py, network.py,
+│   │                              # traffic_lights.py (Sprint 3)
 │   ├── ai/                        # routing.py, rules.py, signal_optimizer.py, rerouting.py
 │   ├── safety/                    # controller.py, monitor.py
 │   ├── tests/
@@ -84,7 +93,8 @@ sparkathon26/                      (EmergencyFlow AI)
 ├── scenarios/
 │   ├── build_grid.py              # grid generator: plain XML -> netconvert -> routes + sumocfg
 │   └── grid2x2/                   # grid.nod.xml, grid.edg.xml, network.net.xml, routes.rou.xml,
-│                                  # simulation.sumocfg (signals.add.xml arrives with preemption)
+│                                  # simulation.sumocfg, scenario.json (depot + hospital)
+│                                  # (signals.add.xml arrives with preemption)
 └── experiments/<arm>/             # CSV + charts + run_manifest.json, written by the runner (Sprint 9)
 ```
 
@@ -104,17 +114,19 @@ backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 Copy-Item .env.example .env
 
 cd backend
+.venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000          # API + live simulation
 .venv\Scripts\python.exe -m simulation.sumo --steps 600 --print-every 50   # headless run, prints vehicles + signals
 .venv\Scripts\python.exe ..\scenarios\build_grid.py                        # regenerate scenarios\grid2x2
 .venv\Scripts\python.exe ..\scenarios\build_grid.py --nx 4 --ny 4          # evaluation grid
 ```
-Call `.venv\Scripts\python.exe` directly instead of activating (avoids the PowerShell execution policy). `uvicorn main:app --reload --port 8000` arrives in Sprint 2.
+Call `.venv\Scripts\python.exe` directly instead of activating (avoids the PowerShell execution policy). The backend reads `EF_SCENARIO`, `EF_SEED` and `EF_SCALE` from `.env`.
 
-### Frontend (from Sprint 2)
+### Frontend
 ```powershell
 cd frontend
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # open http://localhost:5173 (Vite listens on localhost/::1; it proxies /api and /ws to 127.0.0.1:8000)
+npm run build      # typecheck + production build
 ```
 
 ### SUMO sanity checks
@@ -129,7 +141,7 @@ cd backend
 .venv\Scripts\python.exe -m pytest -q                 # add -m "not slow" to skip the 1-hour scenario run
 .venv\Scripts\ruff.exe check --config pyproject.toml . ..\scenarios
 .venv\Scripts\black.exe --config pyproject.toml --check . ..\scenarios
-cd ..\frontend; npm run test                          # from Sprint 2
+cd ..\frontend; npm run test; npm run typecheck
 ```
 
 ## 6. SUMO / TraCI conventions
@@ -140,9 +152,13 @@ cd ..\frontend; npm run test                          # from Sprint 2
   - Shutdown is TraCI close, then wait with a timeout, then kill. It runs from `close()`, the context manager and `atexit`. SUMO also exits by itself if its client is killed (tested). Never leave orphan `sumo` processes.
 - **Timing:**
   - Fixed step length of 0.1 s.
-  - Live mode paces steps at 10 Hz real time and broadcasts every step. Batch mode runs unpaced; `libsumo` is allowed there.
+  - Live mode paces steps at 10 Hz real time and broadcasts every step. Small jitter is caught up; after a longer stall (a reset restarting SUMO) the loop resyncs instead of bursting ticks. Measured: median tick interval 100 ms, worst 113 ms. Batch mode runs unpaced; `libsumo` is allowed there.
+  - Under TraCI, SUMO does not stop at the sumocfg `end` time; the client decides. Background flows end at 3600 s, so a live session needs **Reset** after an hour.
   - Signal timing semantics: the signal state read after `simulationStep()` at time t is the one that governed the step ending at t. Phase changes therefore appear one step (0.1 s) after their nominal start, while durations are exact. Measure clearance as the difference between observed switch times.
 - **Per-step reads:** use TraCI subscriptions, not per-vehicle getter loops (each TraCI call is a TCP round trip).
+  - Signals: one subscription per signal.
+  - Vehicles: one context subscription on the central junction with a radius covering the map.
+  - SUMO reports a vehicle's front-bumper position; `sumo.py` converts it to the vehicle **centre** before anything else sees it.
 - **Traffic side:** left-hand traffic (India), via `netconvert --lefthand`. Lane 0 is the curb (left) lane and carries left + straight; lane 1 carries straight + right. The right turn crosses oncoming traffic and is permissive (`g`).
 - **Network (`scenarios/build_grid.py`):**
   - Grid of signalized junctions named `<col letter><row>` (A0 is south-west), 250 m apart, with 200 m roads to the map edge.
@@ -155,7 +171,7 @@ cd ..\frontend; npm run test                          # from Sprint 2
   - The vType id is the 3D asset key.
   - Cars only (`car_sedan` 70%, `car_hatchback` 30%). Trucks and buses on permissive turns caused SUMO junction collisions (1–11 per hour at 1.5x). They return only with protected turn phases plus a collision check.
 - **sumocfg:** seed 42, `lanechange.duration` 1.5 s (smooth lateral motion, far fewer emergency braking events), `time-to-teleport` 300 (teleports flag a bad run), collision warnings with junction checks on. Baseline target: 0 collisions and 0 teleports (a slow test enforces this).
-- **Ambulance:** a vehicle with `vClass="emergency"` and a dedicated vType (`ambulance`, Sprint 2).
+- **Ambulance:** a vehicle with `vClass="emergency"` and a dedicated vType (`ambulance`), see section 2.6. Depot and hospital come from the scenario's `scenario.json`: the depot is the start of `w0_A0` (west edge), and the hospital is 15 m before the end of `B1_e1` (east edge).
 - **Routing:** use `traci.simulation.findRoute(fromEdge, toEdge)` (Dijkstra by default) or `networkx` on the `sumolib` network. The cost function (live travel time, queues, signal wait, incidents) is what matters, not the algorithm. Re-evaluate on a timer or on incident events, not every step.
 - **Layering:** wrap TraCI calls in the `simulation/` layer. API handlers, AI modules and tests never import `traci` directly.
 
@@ -187,50 +203,73 @@ Never bypass or weaken these checks to make a demo work. Never describe the syst
 
 ## 9. WebSocket protocol (v1)
 
-Every message carries `"v": 1`. Any change bumps the version and must update both `state.ts` types and the backend models in the same commit.
+Every message carries `"v": 1`. The source of truth is `backend/api/protocol.py` (pydantic, camelCase JSON) mirrored by `frontend/src/simulation/state.ts`. Any change must update both in the same commit; a breaking change bumps the version. Fields marked "(Sprint N)" are sent as `null`/`0`/`[]` until that sprint.
 
-Static network, fetched once via `GET /api/network`. The frontend generates roads and places one signal head per approach from it:
+Static network, fetched once via `GET /api/network`. The frontend generates roads, signal lamps and markers from it. Coordinates are SUMO metres. `GET /api/health` returns `{status: starting|running|error, error, seq, t}`.
 ```json
 {
   "v": 1, "lefthand": true, "bounds": [0, 0, 650, 650],
-  "lanes": [{"id": "w0_A0_0", "edge": "w0_A0", "width": 3.2, "shape": [[0, 204.8], [189.6, 204.8]]}],
-  "junctions": [{"id": "A0", "shape": [[190.4, 210.8], [209.6, 210.8]]}],
-  "signals": [{"id": "A0", "links": [{"index": 12, "fromLane": "w0_A0_0", "toLane": "A0_A1_0", "dir": "l", "approach": "w0_A0"}]}]
+  "lanes": [{"id": "w0_A0_0", "edge": "w0_A0", "index": 0, "width": 3.2, "shape": [[0, 204.8], [189.6, 204.8]]}],
+  "junctions": [{"id": "A0", "type": "traffic_light", "shape": [[193.6, 189.6], [206.4, 189.6]]}],
+  "signals": [{"id": "A0", "links": [{"index": 12, "fromLane": "w0_A0_0", "toLane": "A0_A1_0", "dir": "l", "approach": "w0_A0"}]}],
+  "depot": {"edge": "w0_A0", "pos": 0.0, "x": 0.0, "y": 204.8},
+  "hospital": {"edge": "B1_e1", "pos": 174.6, "x": 635.0, "y": 454.8}
 }
 ```
 
-Backend → frontend (state tick, every step):
+Backend → frontend (state tick, every step at 10 Hz):
 ```json
 {
-  "v": 1, "type": "state", "seq": 1234, "t": 123.4, "mode": "COORD",
+  "v": 1, "type": "state", "seq": 1234, "t": 123.4, "mode": "OFF",
   "vehicles": [{"id": "ambulance_01", "type": "ambulance", "x": 421.4, "y": 193.2, "angle": 90, "speed": 16.8, "edge": "A0_B0", "lane": 1}],
   "signals": [{"id": "A0", "state": "GGGgrrrrGGGgrrrr", "phase": 0, "preempted": false}],
-  "route": {"vehicle": "ambulance_01", "edges": ["w0_A0", "A0_B0", "B0_B1"], "eta": 41.2, "compromised": false},
-  "metrics": {"eta": 41.2, "signalsPreempted": 3, "queueCleared": 41, "timeSaved": null},
+  "ambulance": {"id": "ambulance_01", "status": "driving", "throttle": 1, "brake": 0,
+                "nextSignal": {"junction": "B0", "distance": 84.2, "state": "r"},
+                "plannedTurn": {"junction": "B0", "turn": "left", "edge": "B0_B1"},
+                "queuedTurn": null, "missionTime": 41.5},
+  "route": null,
+  "metrics": {"eta": null, "signalsPreempted": 0, "queueCleared": null, "timeSaved": null},
   "incidents": []
 }
 ```
-Signal `state` has one character per link (SUMO notation). A junction does not have a single color. `timeSaved` is `null` unless it was measured against the ghost run (section 14).
+Field notes:
+- **Vehicle `x`, `y`:** the vehicle centre.
+- **Vehicle `lane`:** 0 is the curb lane.
+- **Signal `state`:** one character per link (SUMO notation), indexed by link index. A junction does not have a single colour.
+- **`ambulance.status`:** `none | pending | driving | arrived`.
+- **`ambulance.throttle` / `brake`:** the input the backend actually applied, after the deadman timer.
+- **`nextSignal.state`:** the ambulance's own link.
+- **`route`:** arrives in Sprint 6.
+- **`metrics`:** fill in from Sprint 3 onward. `timeSaved` stays `null` unless it was measured against the ghost run (section 14).
+- **`mode`:** `OFF` until BASIC (Sprint 3) and COORD (Sprint 7).
 
-Frontend → backend (commands). Every command except `drive` carries an `id` and gets an ack:
+Frontend → backend (commands). Every command except `drive` carries an `id` and gets an ack once the engine has run it:
 ```json
-{"v": 1, "id": 1, "cmd": "spawn_ambulance"}
-{"v": 1, "id": 2, "cmd": "set_mode", "mode": "OFF|BASIC|COORD"}
+{"v": 1, "id": 1, "cmd": "spawn_ambulance"}                                                  // dispatch (respawns if on the road)
 {"v": 1, "cmd": "drive", "vehicle": "ambulance_01", "control": {"throttle": 1, "brake": 0}}   // on change + 10 Hz heartbeat, no ack
 {"v": 1, "id": 3, "cmd": "turn", "vehicle": "ambulance_01", "direction": "left|right"}     // intent for the next junction
 {"v": 1, "id": 4, "cmd": "lane", "vehicle": "ambulance_01", "direction": "left|right"}
-{"v": 1, "id": 5, "cmd": "inject_incident", "type": "accident", "edge": "A0_B0"}
-{"v": 1, "id": 6, "cmd": "reset"}
+{"v": 1, "id": 6, "cmd": "reset"}                                                            // restarts SUMO (same seed)
+{"v": 1, "id": 2, "cmd": "set_mode", "mode": "OFF|BASIC|COORD"}                             // Sprint 3
+{"v": 1, "id": 5, "cmd": "inject_incident", "type": "accident", "edge": "A0_B0"}            // Sprint 8
 ```
 ```json
-{"v": 1, "type": "ack", "id": 3, "ok": false, "reason": "no left turn at B1"}
+{"v": 1, "type": "ack", "id": 3, "ok": false, "reason": "too late to turn right at A0: needs the inner lane, only 4 m left"}
+{"v": 1, "type": "ack", "id": 4, "ok": true, "reason": "waiting for a gap in the curb lane"}
+{"v": 1, "type": "error", "reason": "message is not valid JSON"}
 ```
+Replies:
+- **Invalid commands with an `id`:** get `ok: false` with a reason.
+- **Unreadable messages:** get an `error`.
+- **Accepted commands:** `ok: true` may still carry an informative reason ("left turn queued for B0", "waiting for a gap in the curb lane").
 
 ## 10. Coordinate and orientation mapping
 
 - SUMO: x east, y north, angle in degrees clockwise from north.
 - Three.js: x east, y up, z south. Recenter on the network center: `world = (x - cx, 0, -(y - cy))`.
-- Rotation for glTF models facing +Z: `rotation.y = π − angle·π/180` (north → π, east → π/2, south → 0, west → −π/2). Put this conversion in **one** utility (`frontend/src/simulation/coords.ts`) and unit-test it for N/E/S/W. Do not inline it in components.
+- Rotation for glTF models facing +Z: `rotation.y = π − angle·π/180` (north → π, east → π/2, south → 0, west → −π/2). This conversion lives in **one** utility (`frontend/src/simulation/coords.ts`, unit-tested for every 15° heading). Do not inline it in components.
+- Flat generated geometry must face up (+Y), or three.js culls it when seen from above. `geometry.test.ts` checks the face normals.
+- Map labels are canvas-texture sprites (`components/Label.tsx`) with a constant on-screen size. Don't use drei `<Html>` (an extra React root per label, which errors under StrictMode) or drei `<Text>` (it fetches a font from a CDN).
 - Interpolate between ticks on the client (positions linearly, angles along the shortest arc). Never extrapolate beyond one tick. Interpolation adds one tick (100 ms) of display latency; give instant HUD feedback on keydown instead of predicting motion.
 - Per-asset rotation and pivot offsets come from the asset manifest and are applied on a child group, never in `coords.ts`.
 
@@ -244,7 +283,7 @@ Frontend → backend (commands). Every command except `drive` carries an `id` an
 - Traffic light lamps are **separate named meshes**: `lamp_red`, `lamp_yellow`, `lamp_green`. Ambulance has a named `siren` mesh; wheels are named `wheel_*` if separate.
 - Roads, junctions, lane markings, signal-head placement and route overlays are **generated in code** from the network (`/api/network`), not modeled.
 - One signal head per approach at the stop line, lit from that approach's links.
-- Missing assets get placeholders. Never block progress on art.
+- Missing assets get placeholders. Never block progress on art. Until the manifest exists (Sprint 5), placeholder sizes and colours per vType live in `frontend/src/components/vehicleStyles.ts`.
 
 **Asset pipeline.** Manifest and fallback come in Sprint 5. The `/assets` page and `check:assets` come when the first real `.glb` arrives.
 - **Manifest:** `frontend/src/assets/manifest.ts` maps each asset key to `{ file, enabled, fit?: {axis, meters}, scale?, rotationY?, offset?, pivot: "bottom-center" | "none", placeholder: {size, color, shape}, requiredParts?, optionalParts?, aliases?, triBudget }`. Asset keys: ambulance, car_sedan, car_hatchback, bus, truck, traffic_light, hospital, building_01..05, cone, barricade, wrecked_car, tree, streetlight. The SUMO vType id equals the asset key.
@@ -265,7 +304,6 @@ Frontend → backend (commands). Every command except `drive` carries an `id` an
 - **Python:**
   - Type hints everywhere, `ruff` + `black` (line length 100, config in `backend/pyproject.toml`), small modules, no global mutable state outside the simulation manager.
   - Format with black before committing.
-  - The reference `manual_control.py` is excluded from lint until it is integrated.
 - **TypeScript:** `strict` mode, no `any`, state in Zustand, components stay presentational.
 - Prefer iterative changes to the existing code over full rewrites.
 - Commit messages: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
@@ -277,7 +315,7 @@ Frontend → backend (commands). Every command except `drive` carries an `id` an
 | Sprint | Deliverable |
 |---|---|
 | 1 | SUMO world: 2x2 signalized grid (left-hand traffic), seeded background traffic, clean TraCI lifecycle, tests ✅ |
-| 2 | Ambulance vType + manual WASD control (rework the reference demos) + **minimal FastAPI WebSocket and top-down box view**, so manual driving is validated by a human before full 3D; measure input latency |
+| 2 | Ambulance vType + manual WASD control (reference demos reworked) + FastAPI WebSocket + React Three Fiber top-down view; input latency measured ✅ |
 | 3 | Safety controller + independent monitor (tests first), then BASIC preemption with clearance and recovery |
 | 4 | Full WebSocket protocol v1: `/api/network`, versioned messages, command acks, subscriptions for all per-step reads |
 | 5 | 3D scene with placeholders: roads from the network, vehicles, per-approach signal heads, hospital, chase camera; asset manifest + fallback; `coords.ts` |
