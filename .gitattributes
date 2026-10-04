@@ -1,0 +1,5 @@
+# Store text with LF in the repo; Windows checkouts convert as configured.
+* text=auto
+
+# 3D models go through Git LFS (CLAUDE.md section 11). Run `git lfs install` once per machine.
+*.glb filter=lfs diff=lfs merge=lfs -text
