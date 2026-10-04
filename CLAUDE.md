@@ -311,10 +311,11 @@ Replies:
 ## 11. 3D asset rules
 
 - Format: `.glb`, one file per model, textures embedded, committed via **Git LFS**.
-- Sources: Kenney and Quaternius (CC0) first. Sketchfab only for CC0/CC-BY assets. Every asset needs a row in `ATTRIBUTIONS.md`, and CC-BY credit is also shown in-app. CC-BY-NC and Sketchfab "Standard"/"Editorial" are not allowed.
-- Real-world scale in meters (car ~4.5 m, ambulance ~6 m, bus ~12 m).
+- **Licensing:** the team confirmed (2026-10-05) that every delivered `.glb` is purchased or licensed for project use. `ATTRIBUTIONS.md` records source and author credit where known. An empty Source/Link field in the workbook never blocks an asset.
+- **Delivered files are never modified:** no compression, re-encoding, texture resizing, simplification, replacement or renaming of asset files or folders unless explicitly instructed. Scale, rotation and pivot are calibrated in the manifest. Heavy assets are handled in the renderer (lazy loading, instancing, level of detail), never by editing the file.
+- Real-world scale in meters (car ~4.5 m, ambulance ~6 m, bus ~12 m). Delivered models rarely are, and the manifest's `fit` corrects that.
 - Forward = +Z, pivot at center-bottom (the manifest can correct either).
-- Budget: under ~5k triangles per vehicle, ~20k per building.
+- Budget guideline: ~5k triangles per vehicle, ~20k per building. It's a performance target for the renderer, not a reason to reject or edit a delivered asset.
 - Traffic light lamps are **separate named meshes**: `lamp_red`, `lamp_yellow`, `lamp_green`. Ambulance has a named `siren` mesh; wheels are named `wheel_*` if separate.
 - Roads, junctions, lane markings, signal-head placement and route overlays are **generated in code** from the network (`/api/network`), not modeled.
 - One signal head per approach at the stop line, lit from that approach's links.
@@ -328,15 +329,15 @@ Replies:
   2. Map each file to its workbook asset and asset key.
   3. Add or enable its manifest entry (Sprint 5+).
   4. Validate the GLB: triangles, real-world size, named parts, texture weight.
-  5. Record source, licence and validation notes in `ATTRIBUTIONS.md`.
+  5. Record source, credit and validation notes in `ATTRIBUTIONS.md`.
   6. The placeholder swaps automatically. Simulation logic never changes.
-- Sprint 3 validation of the Member 1 and Member 4 deliveries (details in `ATTRIBUTIONS.md`):
+- Mapping decided by the team: `member-4/model.glb` (internal name "bazaar-street-and-shrine") is Member 4's **Shops / commercial row**.
+- Sprint 3 validation of the Member 1 and Member 4 deliveries (details in `ATTRIBUTIONS.md`), used as-is:
   - All 22 files are valid GLBs.
   - Almost none is in metres, so the manifest's auto-fit (`fit`) is required.
   - The ambulance has no `siren` or wheel parts, so it uses the fallback.
-  - Over budget: `model.glb` (92k triangles), `auto_rickshaw` and Truck (vehicles above 5k).
-  - `standard_bus_stop.glb` is 23.7 MB of textures and needs resizing.
-  - Every licence is unconfirmed.
+  - Above the triangle guideline: `model.glb` (92k triangles, 859 nodes), `auto_rickshaw` and Truck (vehicles above 5k).
+  - `standard_bus_stop.glb` is 23.7 MB, almost all textures. Load it lazily (after the scene is interactive) so it doesn't delay the first frame.
 
 **Asset pipeline.** Manifest and fallback come in Sprint 5. The `/assets` page and `check:assets` are built with the 3D scene in Sprint 5, now that real models exist.
 - **Manifest:** `frontend/src/assets/manifest.ts` maps each asset key to `{ file, enabled, fit?: {axis, meters}, scale?, rotationY?, offset?, pivot: "bottom-center" | "none", placeholder: {size, color, shape}, requiredParts?, optionalParts?, aliases?, triBudget }`. Asset keys: ambulance, car_sedan, car_hatchback, bus, truck, traffic_light, hospital, building_01..05, cone, barricade, wrecked_car, tree, streetlight. The SUMO vType id equals the asset key.
@@ -432,7 +433,8 @@ Run seeded batch headless simulations comparing arms, typically on a 4x4 grid; t
 - Don't claim novelty from "ambulance turns the signal green". The contribution is the closed-loop testbed, the human-in-the-loop driving, the verified safety layer, queue-aware coordination and fair, reproducible evaluation.
 - Don't call it a digital twin of a real city, call COORD "AI" without saying it is rule-based, or show an unmeasured `timeSaved`.
 - Don't use SUMO-GUI as the final UI.
-- Don't commit large binaries outside Git LFS, or unlicensed assets.
+- Don't commit large binaries outside Git LFS.
+- Don't modify, compress, rename or replace delivered `.glb` files or the `3d_models/` folders unless explicitly instructed.
 
 ## 17. Definition of done (per feature)
 
