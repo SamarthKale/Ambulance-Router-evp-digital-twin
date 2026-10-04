@@ -144,8 +144,8 @@ class ManualController:
         if self._status == "driving":
             upcoming = self._conn.vehicle.getNextTLS(AMBULANCE_ID)
             if upcoming:
-                tls_id, _, distance, state = upcoming[0]
-                next_signal = NextSignal(tls_id, float(distance), state)
+                tls_id, link_index, distance, state = upcoming[0]
+                next_signal = NextSignal(tls_id, int(link_index), float(distance), state)
         end = self._arrived_at if self._arrived_at is not None else sim_time
         return AmbulanceStatus(
             status=self._status,

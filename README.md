@@ -13,7 +13,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 |---|---|---|
 | 1 | SUMO world: 2x2 signalized grid (left-hand traffic), seeded background traffic, clean TraCI lifecycle | done |
 | 2 | Ambulance + manual WASD driving, FastAPI WebSocket, React Three Fiber top-down view | done |
-| 3 | Safety controller + BASIC signal preemption | next |
+| 3 | Safety controller + independent safety monitor + BASIC signal preemption (OFF/BASIC) | done |
+| 4 | Protocol hardening (per the roadmap in CLAUDE.md) | next |
 
 ## Prerequisites (Windows)
 
@@ -57,10 +58,26 @@ Open **http://localhost:5173**, click **Dispatch ambulance** and drive from the 
 | F | Follow the ambulance on/off (mouse: drag to pan, wheel to zoom) |
 
 How driving works:
-- The ambulance obeys red lights and right of way; signal preemption arrives in Sprint 3.
+- The ambulance obeys red lights and right of way.
 - Its top speed is capped at 80 km/h.
 - If drive input stops for 0.5 s (window loses focus, tab hidden), it coasts to a stop.
 - When a request can't be done, the HUD says why (e.g. "too late to turn right at A0").
+
+### Signal modes
+
+The **OFF / BASIC** buttons switch modes; COORD arrives in Sprint 7.
+
+- **OFF:** normal fixed-time signals.
+- **BASIC:** when the ambulance is 15 s or less from its next signal, that junction is handed to the safety controller:
+  1. **Clearing** (amber ring): conflicting greens turn yellow for 4 s, then all directions are red for 2 s.
+  2. **Preempted** (blue ring): green for the ambulance's approach only.
+  3. **Recovering** (violet ring): once the ambulance has passed, yellow 4 s, then all-red 2 s, then the normal program resumes at the other direction's green.
+  - A preemption lasts at most 40 s.
+  - Afterwards the cross traffic keeps its green for at least 10 s before the next preemption.
+
+The HUD's **Safety** card shows the independent monitor's violation count, SUMO's collision count and the controller's latest decisions with reasons. Both counts must stay 0.
+
+This is a simulation: nothing here controls real traffic signals.
 
 Measured on this machine (Edge, RTX 4060 laptop):
 - 240 FPS.
@@ -92,12 +109,29 @@ Options:
 - `--steps N`: number of 0.1 s steps.
 - `--gui`: `sumo-gui`, for debugging only. It is not the product UI.
 
+## OFF vs BASIC smoke comparison (one seed)
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m scripts.smoke_compare        # --seed N, --scale 1.5
+```
+
+Same scripted trip in both modes: depot → straight at A0 → left at B0 → right at B1 → hospital. Seed 42, demand ×1.0:
+
+```
+mode   mission s stopped s stops preempt violations collisions bg halted veh*s
+OFF         92.0      33.5     3       0          0          0          3946.3
+BASIC       47.5       0.0     0       3          0          0          4700.4
+```
+
+This is **one seed**: a smoke test, not evidence. The seeded multi-run evaluation is Sprint 9. Even so, it shows the trade-off honestly: the ambulance gets there in about half the time, while the other traffic spends about 19% more time stopped over the same 300 s window.
+
 ## Tests and lint
 
 ```powershell
 cd backend
-.venv\Scripts\python.exe -m pytest -q                  # ~45 s, includes a 1-hour heavy-traffic run
-.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~30 s
+.venv\Scripts\python.exe -m pytest -q                  # ~65 s, includes a 1-hour heavy-traffic run
+.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~50 s
 .venv\Scripts\ruff.exe check --config pyproject.toml . ..\scenarios
 .venv\Scripts\black.exe --config pyproject.toml --check . ..\scenarios
 
@@ -141,4 +175,4 @@ Regenerate (from `backend\`):
 - **Leftover `sumo.exe`**: shouldn't happen. The backend owns the SUMO process and kills it on exit, and SUMO quits by itself if its client dies. Check with `Get-Process sumo`.
 - **Page says "Backend not reachable"**: start the backend first (terminal 1). `http://127.0.0.1:8000/api/health` should report `running`.
 - **Open `http://localhost:5173`, not `127.0.0.1:5173`**: Vite listens on `localhost`, which Windows resolves to IPv6 `::1`.
-- **Traffic thins out after an hour**: background traffic is generated for 3600 s of simulated time. Press **Reset**.
+- **How long does live traffic last?** The live server generates background traffic for 24 h (`routes.live.rou.xml`). Experiments and tests use exactly 1 h (`routes.rou.xml`) so results stay comparable.

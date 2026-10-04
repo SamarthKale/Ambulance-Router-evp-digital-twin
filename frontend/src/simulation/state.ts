@@ -26,15 +26,19 @@ export interface VehicleMsg {
   lane: number; // 0 = curb lane
 }
 
+export type SignalControl = "program" | "clearing" | "preempted" | "recovering";
+
 export interface SignalMsg {
   id: string;
   state: string; // one SUMO char per link: G g y r ...
-  phase: number;
-  preempted: boolean;
+  phase: number; // normal program phase (meaningless while not under program control)
+  preempted: boolean; // the safety controller, not the normal program, drives it
+  control: SignalControl;
 }
 
 export interface NextSignalMsg {
   junction: string;
+  linkIndex: number;
   distance: number;
   state: string;
 }
@@ -63,6 +67,21 @@ export interface MetricsMsg {
   timeSaved: number | null; // only ever measured (ghost run)
 }
 
+export interface SafetyEventMsg {
+  t: number;
+  junction: string;
+  vehicle: string | null;
+  action: string; // preempt, green, release, timeout, resume, fail_safe
+  accepted: boolean;
+  reason: string;
+}
+
+export interface SafetyMsg {
+  violations: number; // independent monitor; must stay 0
+  collisions: number; // SUMO-detected
+  events: SafetyEventMsg[]; // safety controller decisions, most recent last
+}
+
 export interface StateMsg {
   v: 1;
   type: "state";
@@ -74,6 +93,7 @@ export interface StateMsg {
   ambulance: AmbulanceMsg;
   route: null; // Sprint 6
   metrics: MetricsMsg;
+  safety: SafetyMsg;
   incidents: string[]; // Sprint 8
 }
 
@@ -145,6 +165,7 @@ export type Command =
   | { v: 1; cmd: "drive"; vehicle: string; control: { throttle: number; brake: number } }
   | { v: 1; id: number; cmd: "turn"; vehicle: string; direction: Direction }
   | { v: 1; id: number; cmd: "lane"; vehicle: string; direction: Direction }
+  | { v: 1; id: number; cmd: "set_mode"; mode: SignalMode }
   | { v: 1; id: number; cmd: "reset" };
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

@@ -18,7 +18,7 @@ import {
 import { AMBULANCE_ID, TICK_MS, useSim, type NetworkMsg, type VehicleMsg } from "../simulation/state";
 import { flatPolygonGeometry, ribbonGeometry } from "./geometry";
 import { Label } from "./Label";
-import { FALLBACK_STYLE, VEHICLE_STYLES, signalColor } from "./vehicleStyles";
+import { CONTROL_COLORS, FALLBACK_STYLE, VEHICLE_STYLES, signalColor } from "./vehicleStyles";
 
 const ROAD_Y = 0.02;
 const JUNCTION_Y = 0.01;
@@ -32,6 +32,7 @@ export function TopDownScene({ network }: { network: NetworkMsg }) {
       <directionalLight position={[100, 300, 50]} intensity={1.2} />
       <Ground network={network} origin={origin} />
       <Roads network={network} origin={origin} />
+      <JunctionControl network={network} origin={origin} />
       <SignalLamps network={network} origin={origin} />
       <Places network={network} origin={origin} />
       <Vehicles origin={origin} />
@@ -93,6 +94,45 @@ function Roads({ network, origin }: { network: NetworkMsg; origin: Origin }) {
           1,
         );
         return <Label key={s.id} text={s.id} position={position} background="#000000a0" />;
+      })}
+    </>
+  );
+}
+
+/** A ring around each junction while the safety controller (not the program) drives it. */
+function JunctionControl({ network, origin }: { network: NetworkMsg; origin: Origin }) {
+  const rings = useMemo(
+    () =>
+      network.signals.flatMap((s) => {
+        const junction = network.junctions.find((j) => j.id === s.id);
+        if (!junction) return [];
+        const xs = junction.shape.map((p) => p[0]);
+        const ys = junction.shape.map((p) => p[1]);
+        const radius = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2;
+        const center = sumoToWorld(
+          (Math.min(...xs) + Math.max(...xs)) / 2,
+          (Math.min(...ys) + Math.max(...ys)) / 2,
+          origin,
+          0.03,
+        );
+        return [{ id: s.id, center, radius: radius + 2 }];
+      }),
+    [network, origin],
+  );
+  const controls = useSim(useShallow((s) => s.curr?.msg.signals.map((sig) => sig.control) ?? []));
+  const order = network.signals.map((s) => s.id);
+  return (
+    <>
+      {rings.map((ring) => {
+        const control = controls[order.indexOf(ring.id)] ?? "program";
+        const color = CONTROL_COLORS[control];
+        if (!color) return null;
+        return (
+          <mesh key={ring.id} position={ring.center} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[ring.radius, ring.radius + 2.5, 48]} />
+            <meshBasicMaterial color={color} transparent opacity={0.85} />
+          </mesh>
+        );
       })}
     </>
   );
