@@ -39,6 +39,7 @@ STEP_LENGTH = 0.1  # s, fixed for every run (CLAUDE.md section 6)
 CONNECT_TIMEOUT_S = 10.0
 SHUTDOWN_TIMEOUT_S = 5.0
 _TLS_VARS = (tc.TL_RED_YELLOW_GREEN_STATE, tc.TL_CURRENT_PHASE, tc.TL_CURRENT_PROGRAM)
+_SIMULATION_VARS = (tc.VAR_TIME, tc.VAR_COLLIDING_VEHICLES_NUMBER)
 _VEHICLE_VARS = (
     tc.VAR_POSITION,
     tc.VAR_ANGLE,
@@ -78,11 +79,18 @@ class SumoConfig:
     scale: float = 1.0  # demand multiplier (1.5 = heavy-traffic demo)
     gui: bool = False  # sumo-gui is for debugging only, never the product UI
     log_path: Path = REPO_ROOT / "logs" / "sumo.log"
+    # Route file in the scenario folder that replaces the sumocfg's. None = the sumocfg's
+    # 1-hour experiment demand; the live server uses "routes.live.rou.xml" (24 h flows).
+    routes: str | None = None
     extra_args: tuple[str, ...] = ()
 
     @property
     def sumocfg(self) -> Path:
         return SCENARIOS_DIR / self.scenario / "simulation.sumocfg"
+
+    @property
+    def net_path(self) -> Path:
+        return SCENARIOS_DIR / self.scenario / "network.net.xml"
 
     def command(self, binary: Path, port: int) -> list[str]:
         # fmt: off
@@ -95,6 +103,8 @@ class SumoConfig:
             "--step-length", str(STEP_LENGTH),
         ]
         # fmt: on
+        if self.routes is not None:
+            cmd += ["--route-files", str(SCENARIOS_DIR / self.scenario / self.routes)]
         if self.gui:
             cmd += ["--start", "--quit-on-end"]
         return cmd + list(self.extra_args)
@@ -125,6 +135,7 @@ class Snapshot:
     time: float  # s
     signals: tuple[SignalState, ...]
     vehicles: tuple[VehicleState, ...]
+    collisions: int = 0  # vehicles involved in a collision during the last step (SUMO)
 
     @property
     def vehicle_count(self) -> int:
@@ -168,6 +179,7 @@ class SumoSimulation:
             for tls_id in self._tls_ids:
                 self._conn.trafficlight.subscribe(tls_id, _TLS_VARS)
             self._subscribe_all_vehicles(self._conn)
+            self._conn.simulation.subscribe(_SIMULATION_VARS)
         except BaseException:
             self.close()
             raise
@@ -271,7 +283,13 @@ class SumoSimulation:
         )
         context = conn.junction.getContextSubscriptionResults(self._context_anchor) or {}
         vehicles = tuple(_vehicle_state(vid, context[vid]) for vid in sorted(context))
-        return Snapshot(time=conn.simulation.getTime(), signals=signals, vehicles=vehicles)
+        sim_vars = conn.simulation.getSubscriptionResults()
+        return Snapshot(
+            time=float(sim_vars[tc.VAR_TIME]),
+            signals=signals,
+            vehicles=vehicles,
+            collisions=int(sim_vars[tc.VAR_COLLIDING_VEHICLES_NUMBER]),
+        )
 
     def signal_program(self, tls_id: str) -> tuple[tuple[str, float], ...]:
         """(state, duration s) for each phase of the signal's active program."""

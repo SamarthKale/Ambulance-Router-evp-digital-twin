@@ -25,6 +25,7 @@ function tick(seq: number, t: number, speed: number): StateMsg {
     },
     route: null,
     metrics: { eta: null, signalsPreempted: 0, queueCleared: null, timeSaved: null },
+    safety: { violations: 0, collisions: 0, events: [] },
     incidents: [],
   };
 }

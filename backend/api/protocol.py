@@ -11,12 +11,22 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic.alias_generators import to_camel
 
-from simulation.engine import ChangeLane, Command, Drive, EngineState, Reset, SpawnAmbulance, Turn
+from simulation.engine import (
+    ChangeLane,
+    Command,
+    Drive,
+    EngineState,
+    Reset,
+    SetMode,
+    SpawnAmbulance,
+    Turn,
+)
 from simulation.vehicle import AMBULANCE_ID
 
 PROTOCOL_VERSION = 1
 
 Direction = Literal["left", "right"]
+Mode = Literal["OFF", "BASIC", "COORD"]
 
 
 class Message(BaseModel):
@@ -64,13 +74,20 @@ class LaneCmd(_Command):
     direction: Direction
 
 
+class SetModeCmd(_Command):
+    id: int
+    cmd: Literal["set_mode"]
+    mode: Mode
+
+
 class ResetCmd(_Command):
     id: int
     cmd: Literal["reset"]
 
 
 ClientCommand = Annotated[
-    SpawnAmbulanceCmd | DriveCmd | TurnCmd | LaneCmd | ResetCmd, Field(discriminator="cmd")
+    SpawnAmbulanceCmd | DriveCmd | TurnCmd | LaneCmd | SetModeCmd | ResetCmd,
+    Field(discriminator="cmd"),
 ]
 CLIENT_COMMAND: TypeAdapter[ClientCommand] = TypeAdapter(ClientCommand)
 
@@ -85,6 +102,8 @@ def to_engine_command(cmd: ClientCommand) -> Command:
             return Turn(direction)
         case LaneCmd(direction=direction):
             return ChangeLane(direction)
+        case SetModeCmd(mode=mode):
+            return SetMode(mode)
         case ResetCmd():
             return Reset()
 
@@ -117,15 +136,20 @@ class VehicleMsg(Message):
     lane: int  # 0 = curb lane
 
 
+SignalControl = Literal["program", "clearing", "preempted", "recovering"]
+
+
 class SignalMsg(Message):
     id: str
     state: str  # one SUMO char per link (G g y r ...); index = link index
-    phase: int
-    preempted: bool = False
+    phase: int  # phase of the normal program (meaningless while not under program control)
+    preempted: bool = False  # the safety controller (not the normal program) drives it
+    control: SignalControl = "program"
 
 
 class NextSignalMsg(Message):
     junction: str
+    link_index: int
     distance: float
     state: str  # the ambulance's own link
 
@@ -149,9 +173,24 @@ class AmbulanceMsg(Message):
 
 class MetricsMsg(Message):
     eta: float | None = None  # Sprint 6
-    signals_preempted: int = 0  # Sprint 3
+    signals_preempted: int = 0  # preemptions that reached green, since the simulation started
     queue_cleared: int | None = None  # Sprint 7
     time_saved: float | None = None  # only ever measured (ghost run, Sprint 9)
+
+
+class SafetyEventMsg(Message):
+    t: float
+    junction: str
+    vehicle: str | None
+    action: str  # preempt, green, release, timeout, resume, fail_safe
+    accepted: bool
+    reason: str
+
+
+class SafetyMsg(Message):
+    violations: int  # independent monitor; must stay 0
+    collisions: int  # SUMO-detected
+    events: list[SafetyEventMsg]  # safety controller decisions, most recent last
 
 
 class StateMsg(Message):
@@ -159,21 +198,38 @@ class StateMsg(Message):
     type: Literal["state"] = "state"
     seq: int
     t: float
-    mode: Literal["OFF", "BASIC", "COORD"]
+    mode: Mode
     vehicles: list[VehicleMsg]
     signals: list[SignalMsg]
     ambulance: AmbulanceMsg
     route: None = None  # Sprint 6
     metrics: MetricsMsg = MetricsMsg()
+    safety: SafetyMsg
     incidents: list[str] = []  # Sprint 8
 
 
 def state_message(state: EngineState) -> StateMsg:
-    snap, amb = state.snapshot, state.ambulance
+    snap, amb, safety = state.snapshot, state.ambulance, state.safety
     return StateMsg(
         seq=state.seq,
         t=round(snap.time, 3),
-        mode=state.mode,  # type: ignore[arg-type]
+        mode=state.mode,
+        metrics=MetricsMsg(signals_preempted=safety.signals_preempted),
+        safety=SafetyMsg(
+            violations=safety.violations,
+            collisions=safety.collisions,
+            events=[
+                SafetyEventMsg(
+                    t=e.time,
+                    junction=e.junction,
+                    vehicle=e.vehicle,
+                    action=e.action,
+                    accepted=e.accepted,
+                    reason=e.reason,
+                )
+                for e in safety.events
+            ],
+        ),
         vehicles=[
             VehicleMsg(
                 id=v.id,
@@ -187,7 +243,16 @@ def state_message(state: EngineState) -> StateMsg:
             )
             for v in snap.vehicles
         ],
-        signals=[SignalMsg(id=s.tls_id, state=s.state, phase=s.phase) for s in snap.signals],
+        signals=[
+            SignalMsg(
+                id=s.tls_id,
+                state=s.state,
+                phase=s.phase,
+                preempted=safety.stages.get(s.tls_id, "program") != "program",
+                control=safety.stages.get(s.tls_id, "program"),
+            )
+            for s in snap.signals
+        ],
         ambulance=AmbulanceMsg(
             status=amb.status,
             throttle=amb.throttle,
@@ -195,6 +260,7 @@ def state_message(state: EngineState) -> StateMsg:
             next_signal=(
                 NextSignalMsg(
                     junction=amb.next_signal.junction,
+                    link_index=amb.next_signal.link_index,
                     distance=round(amb.next_signal.distance, 1),
                     state=amb.next_signal.state,
                 )

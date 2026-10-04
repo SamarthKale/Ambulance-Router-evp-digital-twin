@@ -146,3 +146,28 @@ def test_one_hour_heavy_traffic_has_no_collisions_or_teleports(tmp_path: Path) -
     assert int(vehicles.get("inserted", "0")) > 4000
     assert teleports.get("total") == "0"
     assert safety.get("collisions") == "0"
+
+
+def inserted_between(routes: str, begin: int, end: int, tmp_path: Path) -> int:
+    config = SumoConfig()
+    stats = tmp_path / f"{routes}.stats.xml"
+    # fmt: off
+    cmd = [
+        str(find_sumo_binary()),
+        "-n", str(config.net_path),
+        "-r", str(config.sumocfg.parent / routes),
+        "--begin", str(begin), "--end", str(end),
+        "--statistic-output", str(stats),
+    ]
+    # fmt: on
+    subprocess.run(cmd, check=True, capture_output=True)
+    vehicles = ET.parse(stats).getroot().find("vehicles")
+    assert vehicles is not None
+    return int(vehicles.get("inserted", "0"))
+
+
+def test_live_traffic_continues_past_one_hour_but_experiments_stop(tmp_path: Path) -> None:
+    """Live demo demand runs 24 h; the experiment demand stays exactly 1 h."""
+    assert inserted_between("routes.live.rou.xml", 7200, 7320, tmp_path) > 20
+    assert inserted_between("routes.live.rou.xml", 86000, 86120, tmp_path) > 20
+    assert inserted_between("routes.rou.xml", 7200, 7320, tmp_path) == 0

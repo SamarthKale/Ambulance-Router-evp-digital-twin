@@ -20,6 +20,7 @@ MissionStatus = Literal["none", "pending", "driving", "arrived"]
 @dataclass(frozen=True)
 class NextSignal:
     junction: str
+    link_index: int  # the signal link the ambulance will use
     distance: float  # m to the stop line
     state: str  # SUMO signal char of the ambulance's own link (G g y r ...)
 

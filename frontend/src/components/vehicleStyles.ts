@@ -17,6 +17,13 @@ export const VEHICLE_STYLES: Record<string, VehicleStyle> = {
 
 export const FALLBACK_STYLE: VehicleStyle = { size: [1.8, 1.5, 4.5], color: "#9ca3af" };
 
+/** Who drives a junction's signals: hidden for the normal program. */
+export const CONTROL_COLORS: Record<string, string> = {
+  clearing: "#f59e0b", // yellow + all-red before the ambulance's green
+  preempted: "#3b82f6", // green held for the ambulance
+  recovering: "#a855f7", // yellow + all-red back to the normal program
+};
+
 /** SUMO signal state char -> lamp colour. */
 export function signalColor(state: string): string {
   switch (state) {

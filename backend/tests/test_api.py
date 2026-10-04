@@ -1,4 +1,4 @@
-﻿"""Sprint 2: HTTP + WebSocket protocol v1 against a live engine (10 Hz)."""
+"""Sprint 2: HTTP + WebSocket protocol v1 against a live engine (10 Hz)."""
 
 from __future__ import annotations
 
@@ -75,6 +75,60 @@ def test_state_ticks_arrive_at_10_hz(client: TestClient) -> None:
     assert {"metrics", "route", "incidents", "signals", "vehicles"} <= tick.keys()
     assert tick["metrics"]["timeSaved"] is None
     assert len(tick["signals"][0]["state"]) == 16
+    assert tick["signals"][0]["control"] == "program" and tick["signals"][0]["preempted"] is False
+    assert tick["safety"] == {"violations": 0, "collisions": 0, "events": []}
+
+
+FULL_THROTTLE = {
+    "v": 1,
+    "cmd": "drive",
+    "vehicle": "ambulance_01",
+    "control": {"throttle": 1, "brake": 0},
+}
+
+
+def drive_until(ws: WebSocketTestSession, match: Callable[[Msg], bool], limit: int) -> Msg:
+    """Hold W like the browser does: a drive message per tick keeps the 0.5 s deadman alive."""
+    for _ in range(limit):
+        ws.send_json(FULL_THROTTLE)
+        msg: Msg = ws.receive_json()
+        if match(msg):
+            return msg
+    pytest.fail("expected message never arrived")
+
+
+def test_basic_mode_preempts_over_the_websocket(client: TestClient) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"v": 1, "id": 1, "cmd": "set_mode", "mode": "BASIC"})
+        assert wait_for(ws, ack(1)) == {
+            "v": 1,
+            "type": "ack",
+            "id": 1,
+            "ok": True,
+            "reason": "BASIC mode",
+        }
+        ws.send_json({"v": 1, "id": 2, "cmd": "set_mode", "mode": "COORD"})
+        assert "Sprint 7" in wait_for(ws, ack(2))["reason"]
+        ws.send_json({"v": 1, "id": 3, "cmd": "spawn_ambulance"})
+        wait_for(ws, ack(3))
+        preempting = drive_until(
+            ws, lambda m: m["type"] == "state" and m["signals"][0]["control"] != "program", 200
+        )
+        a0 = preempting["signals"][0]
+        assert a0["id"] == "A0" and a0["preempted"] is True and preempting["mode"] == "BASIC"
+        event = preempting["safety"]["events"][-1]
+        assert event["junction"] == "A0" and event["accepted"] and event["reason"]
+        assert preempting["ambulance"]["nextSignal"]["linkIndex"] in (12, 13, 14, 15)
+        green = drive_until(
+            ws, lambda m: m["type"] == "state" and m["metrics"]["signalsPreempted"] == 1, 150
+        )
+        assert green["safety"]["violations"] == 0
+
+
+def test_live_server_uses_24_hour_traffic() -> None:
+    from main import LIVE_ROUTES, engine_from_env
+
+    assert engine_from_env().config.routes == LIVE_ROUTES == "routes.live.rou.xml"
 
 
 def test_drive_session_acks_and_rejections(client: TestClient) -> None:

@@ -45,6 +45,7 @@ export function App() {
         network={network}
         onDispatch={() => send({ cmd: "spawn_ambulance" })}
         onReset={() => send({ cmd: "reset" })}
+        onMode={(mode) => send({ cmd: "set_mode", mode })}
       />
       {error && <div className="banner">Backend not reachable: {error}</div>}
     </div>

@@ -19,6 +19,8 @@ from api.websocket import router as ws_router
 from simulation.engine import SimulationEngine
 from simulation.sumo import REPO_ROOT, SumoConfig
 
+LIVE_ROUTES = "routes.live.rou.xml"
+
 
 def engine_from_env() -> SimulationEngine:
     load_dotenv(REPO_ROOT / ".env")
@@ -26,6 +28,7 @@ def engine_from_env() -> SimulationEngine:
         scenario=os.environ.get("EF_SCENARIO", "grid2x2"),
         seed=int(os.environ.get("EF_SEED", "42")),
         scale=float(os.environ.get("EF_SCALE", "1.0")),
+        routes=LIVE_ROUTES,  # 24 h of background traffic; experiments keep the 1 h file
     )
     return SimulationEngine(config)
 

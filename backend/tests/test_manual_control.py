@@ -6,24 +6,15 @@ into A0, curb lane 0 = north side). A0 is red for that approach from 0 to 37 s.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from simulation.engine import (
-    ChangeLane,
-    Command,
-    Drive,
-    EngineState,
-    Reset,
-    SimulationEngine,
-    SpawnAmbulance,
-    Turn,
-)
-from simulation.manual_control import CommandResult
-from simulation.sumo import STEP_LENGTH, SumoConfig, VehicleState
+from simulation.engine import ChangeLane, Drive, EngineState, Reset, SimulationEngine, Turn
+from simulation.sumo import STEP_LENGTH, SumoConfig
 from simulation.vehicle import AMBULANCE_ID
+from tests.helpers import amb, command, on_edge, run, run_until, spawn
 
 
 @pytest.fixture
@@ -34,56 +25,6 @@ def engine(tmp_path: Path) -> Iterator[SimulationEngine]:
     eng.open()
     yield eng
     eng.close()
-
-
-def command(engine: SimulationEngine, cmd: Command) -> CommandResult:
-    future = engine.submit(cmd)
-    engine.tick()
-    return future.result(timeout=0)
-
-
-def run_until(
-    engine: SimulationEngine, seconds: float, until: Callable[[EngineState], bool]
-) -> EngineState | None:
-    for _ in range(round(seconds / STEP_LENGTH)):
-        state = engine.tick()
-        if until(state):
-            return state
-    return None
-
-
-def run(
-    engine: SimulationEngine,
-    seconds: float,
-    until: Callable[[EngineState], bool] | None = None,
-) -> EngineState:
-    if until is None:
-        for _ in range(round(seconds / STEP_LENGTH)):
-            state = engine.tick()
-        return state
-    reached = run_until(engine, seconds, until)
-    if reached is None:
-        pytest.fail(f"condition not reached within {seconds} s")
-    return reached
-
-
-def amb(state: EngineState) -> VehicleState:
-    vehicle = state.snapshot.vehicle(AMBULANCE_ID)
-    assert vehicle is not None, "ambulance not on the road"
-    return vehicle
-
-
-def on_edge(edge: str) -> Callable[[EngineState], bool]:
-    def check(state: EngineState) -> bool:
-        vehicle = state.snapshot.vehicle(AMBULANCE_ID)
-        return vehicle is not None and vehicle.edge == edge
-
-    return check
-
-
-def spawn(engine: SimulationEngine) -> EngineState:
-    assert command(engine, SpawnAmbulance()).ok
-    return run(engine, 5, until=lambda s: s.ambulance.status == "driving")
 
 
 def test_spawns_at_depot_in_curb_lane_planning_straight(engine: SimulationEngine) -> None:
