@@ -4,6 +4,11 @@ traci==1.27.1
 sumolib==1.27.1
 python-dotenv==1.2.4
 
+# Evaluation (experiment runner, statistics, charts)
+numpy==2.5.3
+pandas==3.0.6
+matplotlib==3.11.2
+
 # API
 fastapi==0.142.2
 uvicorn[standard]==0.54.0

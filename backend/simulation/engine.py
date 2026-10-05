@@ -41,10 +41,16 @@ from safety.controller import SafetyController, SafetyEvent, Stage, UnsafePlanEr
 from safety.monitor import SafetyMonitor
 from simulation.incidents import MIN_ROAD_M, Incident, IncidentError, Incidents
 from simulation.manual_control import DEADMAN_S, OK, CommandResult, ManualController
-from simulation.network import RoadNetwork
+from simulation.network import Mission, RoadNetwork
 from simulation.sumo import STEP_LENGTH, Snapshot, SumoConfig, SumoSimulation, VehicleState
 from simulation.traffic_lights import TrafficLights, load_signal_tables
-from simulation.vehicle import AMBULANCE_ID, AmbulanceStatus, Direction, spawn_ambulance
+from simulation.vehicle import (
+    AMBULANCE_ID,
+    AMBULANCE_TYPE,
+    AmbulanceStatus,
+    Direction,
+    spawn_ambulance,
+)
 
 log = logging.getLogger(__name__)
 
@@ -194,12 +200,17 @@ class SimulationEngine:
         routing: Routing = "dynamic",
         control: Control = "manual",
         coord_rule: Callable[[], CoordRule] = CoordPreemption,  # a fresh rule per simulation
+        mission: Mission | None = None,  # batch experiments: own start and destination
+        ambulance_type: str = AMBULANCE_TYPE,  # batch experiments: a vType variant
     ) -> None:
         self.config = config
         self.warmup_s = warmup_s
         self.routing: Routing = routing
         self.control: Control = control
+        self.ambulance_type = ambulance_type
         self.network = RoadNetwork(config.scenario)
+        if mission is not None:
+            self.network = self.network.with_mission(mission)
         self.graph = self.network.road_graph()
         self._successors = self.graph.successors()
         self.tables = load_signal_tables(config.net_path)
@@ -499,9 +510,13 @@ class SimulationEngine:
             return
         manual.set_drive(1.0, 0.0)
         plan = self._route
-        if plan is None or vehicle.edge != plan.edges[0] or len(plan.edges) < 2:
+        # Static routing keeps the whole dispatch plan: steer from where the ambulance is on it.
+        if plan is None or vehicle.edge not in plan.edges:
             return
-        target = plan.edges[1]
+        ahead = plan.edges[plan.edges.index(vehicle.edge) :]
+        if len(ahead) < 2:
+            return
+        target = ahead[1]
         planned = manual.planned
         if planned is not None and planned.edge == target:
             return
@@ -513,7 +528,7 @@ class SimulationEngine:
             self._ambulance_class,
             junction=self.graph.edges[vehicle.edge].to_node,
             current_edge=vehicle.edge,
-            route=plan.edges,
+            route=ahead,
             successors=self._successors,
             destination=self.network.hospital.edge,
         )
@@ -711,7 +726,8 @@ class SimulationEngine:
                 self.open()
                 return CommandResult(True, "simulation restarted")
             case SpawnAmbulance():
-                spawn_ambulance(sim.connection, self.network, f"ambulance_{next(self._route_ids)}")
+                route_id = f"ambulance_{next(self._route_ids)}"
+                spawn_ambulance(sim.connection, self.network, route_id, self.ambulance_type)
                 manual.on_spawned(self._now)
                 self._ambulance_class = None
                 self._queue_watch.clear()

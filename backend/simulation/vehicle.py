@@ -43,15 +43,18 @@ class AmbulanceStatus:
     mission_time: float | None = None  # s since spawn, frozen on arrival
 
 
-def spawn_ambulance(conn: Connection, network: RoadNetwork, route_id: str) -> None:
-    """(Re)insert the ambulance at the depot, curb lane, standing still."""
+def spawn_ambulance(
+    conn: Connection, network: RoadNetwork, route_id: str, type_id: str = AMBULANCE_TYPE
+) -> None:
+    """(Re)insert the ambulance at the depot, curb lane, standing still. `type_id`: a variant
+    of the ambulance vType (batch experiments only, e.g. one allowed to cross red lights)."""
     if AMBULANCE_ID in conn.vehicle.getIDList():
         conn.vehicle.remove(AMBULANCE_ID)
     conn.route.add(route_id, [network.depot.edge])
     conn.vehicle.add(
         AMBULANCE_ID,
         route_id,
-        typeID=AMBULANCE_TYPE,
+        typeID=type_id,
         depart="now",
         departLane="0",
         departPos=str(network.depot.pos),

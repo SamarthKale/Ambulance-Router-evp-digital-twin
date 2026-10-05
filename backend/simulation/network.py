@@ -3,6 +3,7 @@ signal link tables, depot and hospital."""
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import xml.etree.ElementTree as ET
@@ -26,6 +27,14 @@ class Place:
     y: float
 
 
+@dataclass(frozen=True)
+class Mission:
+    """Experiment missions (CLAUDE.md section 14) replace the scenario's depot and hospital."""
+
+    origin: str  # the ambulance starts at the beginning of this road
+    destination: str  # and parks the scenario's stop distance before the end of this one
+
+
 class RoadNetwork:
     def __init__(self, scenario: str) -> None:
         folder = SCENARIOS_DIR / scenario
@@ -35,9 +44,18 @@ class RoadNetwork:
         self.lefthand = ET.parse(net_path).getroot().get("lefthand") == "true"
         places = json.loads((folder / "scenario.json").read_text())
         self.depot = self._place(places["depot"]["edge"], float(places["depot"]["pos"]))
-        hospital_edge = places["hospital"]["edge"]
-        hospital_pos = self.edge_length(hospital_edge) - float(places["hospital"]["stopBeforeEnd"])
-        self.hospital = self._place(hospital_edge, hospital_pos)
+        self._stop_before_end = float(places["hospital"]["stopBeforeEnd"])
+        self.hospital = self._hospital_on(places["hospital"]["edge"])
+
+    def with_mission(self, mission: Mission) -> RoadNetwork:
+        """The same network with the mission's start and destination as depot and hospital."""
+        network = copy.copy(self)
+        network.depot = self._place(mission.origin, 0.0)
+        network.hospital = self._hospital_on(mission.destination)
+        return network
+
+    def _hospital_on(self, edge_id: str) -> Place:
+        return self._place(edge_id, self.edge_length(edge_id) - self._stop_before_end)
 
     def edge_length(self, edge_id: str) -> float:
         return float(self.net.getEdge(edge_id).getLength())

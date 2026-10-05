@@ -117,5 +117,18 @@ def test_static_routing_keeps_the_dispatch_plan(tmp_path: Path) -> None:
             later.route.edges
             == dispatch_plan.edges[len(dispatch_plan.edges) - len(later.route.edges) :]
         )
+        # The autopilot steers the whole dispatch plan, not just its first junction (it once
+        # went straight on at every later junction: the plan's first road was long behind).
+        driven: list[str] = [e for e in dispatch_plan.edges[:1]]
+
+        def arrived(state: EngineState) -> bool:
+            vehicle = state.snapshot.vehicle("ambulance_01")
+            if vehicle is not None and not vehicle.edge.startswith(":"):
+                if driven[-1] != vehicle.edge:
+                    driven.append(vehicle.edge)
+            return state.ambulance.status == "arrived"
+
+        run(engine, 180, until=arrived)
+        assert tuple(driven) == dispatch_plan.edges
     finally:
         engine.close()
