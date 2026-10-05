@@ -18,7 +18,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 5 | 3D city with the team's delivered models: asset manifest, instancing + LOD, chase/orbit/map cameras, HDRI sky, `/assets` page, `check:assets` | done |
 | 6 | Live-cost shortest-path routing: route overlay, ETA and distance, advisory turn hints, seeded ETA check | done |
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation | done |
-| 8 | Accident injection + automatic reroute + "route compromised" | next |
+| 8 | Accident injection + automatic reroute + "route compromised" | done |
+| 9 | Experiment runner (paired seeds, arms, demand sweep), charts, ghost comparison run | next |
 
 ## Prerequisites (Windows)
 
@@ -76,6 +77,13 @@ The route is planned with live costs:
 It is re-planned every second and every time the ambulance reaches a new road. It is advice only: you steer.
 - **Off the suggestion:** if your next turn differs, the route turns orange and the HUD says which key to press (A or D).
 - **Accuracy:** over 10 seeded autopilot runs on the 4x4 grid, the ETA at dispatch was within 10 % on average with BASIC. With normal signals (OFF) it was within 25 %, because every red light met is a lottery. Run `scripts.eta_check` (below) to reproduce this.
+
+### Accidents
+
+**Create accident** puts a wrecked car in the curb lane of the next road on the suggested route (beyond the next junction). It is closed off with a barrier, cones and a road-block marker.
+- **In the simulation:** the wreck is a stopped vehicle in SUMO, so traffic behind it merges into the open lane and queues.
+- **On the route:** the route is re-planned at once. If the accident was on it, the HUD shows **Route compromised** with the ETA change, and the new suggestion goes round it whenever that is faster. As always, you steer.
+- **Clear accidents** removes every wreck; so does **Reset**.
 
 ### The 3D city
 

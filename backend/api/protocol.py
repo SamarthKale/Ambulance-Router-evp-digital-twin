@@ -13,15 +13,18 @@ from pydantic.alias_generators import to_camel
 
 from simulation.engine import (
     ChangeLane,
+    ClearIncidents,
     Command,
     Drive,
     EngineState,
+    InjectAccident,
     Reset,
     RouteStatus,
     SetMode,
     SpawnAmbulance,
     Turn,
 )
+from simulation.incidents import Incident, is_wreck
 from simulation.vehicle import AMBULANCE_ID
 
 PROTOCOL_VERSION = 1
@@ -99,6 +102,21 @@ class ReleaseControlCmd(_Command):
     cmd: Literal["release_control"]
 
 
+class InjectIncidentCmd(_Command):
+    """An accident blocks one lane mid-way along a road. Without an edge: the road after the
+    ambulance's next junction on the suggested route."""
+
+    id: int
+    cmd: Literal["inject_incident"]
+    type: Literal["accident"]
+    edge: str | None = None
+
+
+class ClearIncidentsCmd(_Command):
+    id: int
+    cmd: Literal["clear_incidents"]
+
+
 ClientCommand = Annotated[
     SpawnAmbulanceCmd
     | DriveCmd
@@ -107,7 +125,9 @@ ClientCommand = Annotated[
     | SetModeCmd
     | ResetCmd
     | HelloCmd
-    | ReleaseControlCmd,
+    | ReleaseControlCmd
+    | InjectIncidentCmd
+    | ClearIncidentsCmd,
     Field(discriminator="cmd"),
 ]
 CLIENT_COMMAND: TypeAdapter[ClientCommand] = TypeAdapter(ClientCommand)
@@ -127,6 +147,10 @@ def to_engine_command(cmd: ClientCommand) -> Command:
             return SetMode(mode)
         case ResetCmd():
             return Reset()
+        case InjectIncidentCmd(edge=edge):
+            return InjectAccident(edge)
+        case ClearIncidentsCmd():
+            return ClearIncidents()
         case HelloCmd() | ReleaseControlCmd():
             raise ValueError(f"'{cmd.cmd}' is a session command, not an engine command")
 
@@ -222,6 +246,12 @@ class RouteMsg(Message):
     drive: float  # s of the plan's ETA spent driving...
     queue: float  # ...waiting for queues to discharge...
     signal: float  # ...and waiting at red lights
+    # An accident hit the route: shown for a while after the re-plan, and as long as the
+    # route still runs through it.
+    compromised: bool = False
+    compromised_by: str | None = None  # the road with the accident
+    eta_change: float | None = None  # s, new ETA minus the ETA just before the accident
+    blocked_ahead: bool = False  # the route still passes an accident (no faster way round)
 
 
 class MetricsMsg(Message):
@@ -248,6 +278,17 @@ class SafetyMsg(Message):
     events: list[SafetyEventMsg]  # safety controller decisions, most recent last
 
 
+class IncidentMsg(Message):
+    id: str
+    type: Literal["accident"]
+    edge: str
+    lane: int  # 0 = curb lane
+    x: float  # m, SUMO coordinates of the wreck
+    y: float
+    angle: float  # deg clockwise from north, along the road
+    since: float  # simulation time
+
+
 class StateMsg(Message):
     v: Literal[1] = 1
     type: Literal["state"] = "state"
@@ -260,7 +301,7 @@ class StateMsg(Message):
     route: RouteMsg | None = None
     metrics: MetricsMsg = MetricsMsg()
     safety: SafetyMsg
-    incidents: list[str] = []  # Sprint 8
+    incidents: list[IncidentMsg] = []  # wrecks are drawn from here, not from vehicles
 
 
 def route_message(route: RouteStatus | None) -> RouteMsg | None:
@@ -275,9 +316,26 @@ def route_message(route: RouteStatus | None) -> RouteMsg | None:
         follows=route.follows,
         routing=route.routing,
         computed_at=round(plan.computed_at, 3),
-        drive=round(plan.drive_s, 1),
+        drive=round(plan.drive_s - plan.incident_s, 1),
         queue=round(plan.queue_s, 1),
         signal=round(plan.signal_s, 1),
+        compromised=route.compromised_by is not None,
+        compromised_by=route.compromised_by,
+        eta_change=route.eta_change_s,
+        blocked_ahead=route.blocked_ahead,
+    )
+
+
+def incident_message(incident: Incident) -> IncidentMsg:
+    return IncidentMsg(
+        id=incident.id,
+        type="accident",
+        edge=incident.edge,
+        lane=incident.lane,
+        x=incident.x,
+        y=incident.y,
+        angle=incident.angle,
+        since=incident.since,
     )
 
 
@@ -321,6 +379,7 @@ def state_message(state: EngineState) -> StateMsg:
                 lane=v.lane,
             )
             for v in snap.vehicles
+            if not is_wreck(v.id)
         ],
         signals=[
             SignalMsg(
@@ -358,6 +417,7 @@ def state_message(state: EngineState) -> StateMsg:
             queued_turn=amb.queued_turn,
             mission_time=None if amb.mission_time is None else round(amb.mission_time, 1),
         ),
+        incidents=[incident_message(i) for i in state.incidents],
     )
 
 

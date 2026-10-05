@@ -10,6 +10,7 @@ import { Ambulance } from "./Ambulance";
 import { CameraRig } from "./CameraRig";
 import { City3D } from "./City3D";
 import { buildCityLayout } from "./cityLayout";
+import { Incidents } from "./Incidents";
 import { FRAME, screen } from "./lod";
 import { RouteOverlay } from "./RouteOverlay";
 import { Sky } from "./Sky";
@@ -33,6 +34,7 @@ export function CityScene({ network }: { network: NetworkMsg }) {
       <SignalHeads heads={layout.signalHeads} />
       {top && <LinkDiscs network={network} origin={origin} />}
       <RouteOverlay network={network} origin={origin} />
+      <Incidents origin={origin} lefthand={network.lefthand} />
       <TrafficVehicles />
       <Ambulance />
       <CameraRig network={network} origin={origin} />

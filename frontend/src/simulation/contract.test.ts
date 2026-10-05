@@ -10,6 +10,7 @@ import * as fixtures from "./contract.fixtures";
 import type {
   Command,
   HealthMsg,
+  IncidentType,
   MissionStatus,
   Routing,
   ServerMsg,
@@ -35,7 +36,8 @@ const enumsMatch: [
   Equal<TurnKind, Values<"turn">>,
   Equal<HealthMsg["status"], Values<"healthStatus">>,
   Equal<Routing, Values<"routing">>,
-] = [true, true, true, true, true, true, true];
+  Equal<IncidentType, Values<"incidentType">>,
+] = [true, true, true, true, true, true, true, true];
 
 describe("protocol contract", () => {
   it("knows every backend command, server message type and enum value", () => {

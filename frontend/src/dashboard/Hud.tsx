@@ -28,6 +28,8 @@ interface HudProps {
   onReset: () => void;
   onMode: (mode: SignalMode) => void;
   onRelease: () => void;
+  onAccident: () => void;
+  onClearAccidents: () => void;
 }
 
 const ROLE_TEXT = {
@@ -60,7 +62,7 @@ const panelStyle = {
   right: { width: HUD_RIGHT_PX, right: HUD_MARGIN_PX },
 };
 
-export function Hud({ network, onDispatch, onReset, onMode, onRelease }: HudProps) {
+export function Hud({ network, onDispatch, onReset, onMode, onRelease, onAccident, onClearAccidents }: HudProps) {
   const s = useSim(
     useShallow((st) => ({
       connection: st.connection,
@@ -185,6 +187,21 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease }: HudProp
             </button>
           )}
         </div>
+        <div className="hud-row">
+          <button
+            className="danger"
+            onClick={onAccident}
+            disabled={observer || !msg?.route}
+            title="Block one lane of the next road on the suggested route with an accident"
+          >
+            Create accident
+          </button>
+          {(msg?.incidents.length ?? 0) > 0 && (
+            <button onClick={onClearAccidents} disabled={observer}>
+              Clear accidents ({msg?.incidents.length})
+            </button>
+          )}
+        </div>
         <div className="muted small">
           W/S speed · A/D turn at next junction · Q/E lane · input→response{" "}
           {latency === null ? "-" : `${latency.toFixed(0)} ms (n=${s.latencyMs.length})`}
@@ -206,6 +223,11 @@ export function formatEta(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+export function formatChange(seconds: number): string {
+  const s = Math.round(seconds);
+  return s === 0 ? "unchanged" : `${s > 0 ? "+" : "−"}${Math.abs(s)} s`;
+}
+
 export function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
 }
@@ -216,6 +238,21 @@ function RouteCard({ route }: { route: RouteMsg }) {
   const key = next ? TURN_KEY[next.turn] : undefined;
   return (
     <div className={`route-card ${route.follows ? "" : "off-plan"}`}>
+      {route.compromised && (
+        <div className="compromised" role="alert">
+          <strong>Route compromised</strong>: accident on {route.compromisedBy}
+          <div className="small">
+            {route.blockedAhead
+              ? "no faster way round: the route still passes it"
+              : `re-routed${route.etaChange != null ? ` · ETA ${formatChange(route.etaChange)}` : ""}`}
+          </div>
+        </div>
+      )}
+      {!route.compromised && route.blockedAhead && (
+        <div className="hud-row">
+          <span className="tag warn">route passes an accident</span>
+        </div>
+      )}
       <div className="hud-row">
         <span className="eta">ETA {formatEta(route.eta)}</span>
         <span className="muted">{formatDistance(route.distance)} to the hospital</span>

@@ -83,6 +83,8 @@ function Simulation() {
         onReset={() => send({ cmd: "reset" })}
         onMode={(mode) => send({ cmd: "set_mode", mode })}
         onRelease={() => send({ cmd: "release_control" })}
+        onAccident={() => send({ cmd: "inject_incident", type: "accident" })}
+        onClearAccidents={() => send({ cmd: "clear_incidents" })}
       />
       {error && <div className="banner">Backend not reachable: {error}</div>}
     </div>

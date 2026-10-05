@@ -94,6 +94,8 @@ def test_first_dispatcher_drives_and_others_observe(client: TestClient) -> None:
                 {"cmd": "lane", "vehicle": AMB, "direction": "right"},
                 {"cmd": "set_mode", "mode": "BASIC"},
                 {"cmd": "reset"},
+                {"cmd": "inject_incident", "type": "accident", "edge": "A0_B0"},
+                {"cmd": "clear_incidents"},
             ],
             start=10,
         ):
