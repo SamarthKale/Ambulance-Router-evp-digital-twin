@@ -83,10 +83,8 @@ function ExperimentChart({
   const height = bars.length * ROW + 28;
   const ticks = [0, max / 2, max];
   const byArm = new Map(experiment.arms.map((a) => [a.arm, a]));
-  const safety = experiment.arms.reduce(
-    (t, a) => ({ violations: t.violations + a.safety.violations, collisions: t.collisions + a.safety.collisions }),
-    { violations: 0, collisions: 0 },
-  );
+  const violations = experiment.arms.reduce((t, a) => t + a.safety.violations, 0);
+  const crossesReds = experiment.arms.some((a) => a.signals === "off_realistic" && a.safety.collisions > 0);
   return (
     <>
       <div className="muted small">
@@ -134,6 +132,7 @@ function ExperimentChart({
             <th>arm</th>
             <th>travel vs baseline (95 % CI)</th>
             <th>background delay vs baseline</th>
+            <th>collisions</th>
           </tr>
         </thead>
         <tbody>
@@ -146,14 +145,17 @@ function ExperimentChart({
                 </td>
                 <td>{b.arm === baseline ? "baseline" : formatPaired(arm.travelVsBaseline, "s")}</td>
                 <td>{b.arm === baseline ? "" : formatPaired(arm.bgDelayVsBaseline, "veh·s")}</td>
+                <td className={arm.safety.collisions > 0 ? "alarm-text" : ""}>{arm.safety.collisions}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
       <div className="muted small">
-        Safety over all runs: {safety.violations} violations (independent monitor), {safety.collisions} collisions
-        (SUMO). Dashed bars: static routing.
+        Signal safety over all runs: {violations} violations (independent monitor). Collisions: vehicles in SUMO
+        collisions after the dispatch, per arm.
+        {crossesReds && " OFF realistic crosses reds the way SUMO models it, without yielding to cross traffic."} Dashed
+        bars: static routing.
       </div>
     </>
   );

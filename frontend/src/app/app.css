@@ -314,6 +314,11 @@ button.primary:hover:not(:disabled) {
   font-weight: 500;
 }
 
+.alarm-text {
+  color: #f87171;
+  font-weight: 600;
+}
+
 .this-drive {
   padding: 6px 8px;
   border-radius: 6px;

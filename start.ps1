@@ -177,8 +177,8 @@ try {
     Say "Press Ctrl+C to stop both servers." "Gray"
 
     while ($true) {
-        if ($backendProcess.HasExited) { Say "the backend exited (code $($backendProcess.ExitCode)); stopping" "Yellow"; break }
-        if ($frontendProcess.HasExited) { Say "the frontend exited (code $($frontendProcess.ExitCode)); stopping" "Yellow"; break }
+        if ($backendProcess.HasExited) { Say "the backend exited (see logs\backend*.log); stopping the other one" "Yellow"; break }
+        if ($frontendProcess.HasExited) { Say "the frontend exited (see logs\frontend*.log); stopping the other one" "Yellow"; break }
         Start-Sleep -Seconds 1
     }
 } catch {

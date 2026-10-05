@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import itertools
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from evaluation.metrics import parse_log
 from evaluation.stats import _ranks, bootstrap_mean_ci, paired, wilcoxon_signed_rank
 
 
@@ -58,3 +60,20 @@ def test_paired_needs_the_same_seeds() -> None:
     assert result.ci_low <= result.mean_diff <= result.ci_high
     with pytest.raises(ValueError):
         paired([1.0], [1.0, 2.0])
+
+
+def test_sumo_log_warnings_are_counted_from_the_dispatch_on(tmp_path: Path) -> None:
+    log = tmp_path / "sumo.log"
+    log.write_text(
+        "Warning: Teleporting vehicle 'f_a.1'; waited too long, lane='x', time=100.00.\n"
+        "Warning: Vehicle 'f_b.2' performs emergency braking on lane 'y', time=320.40.\n"
+        "Warning: Vehicle 'ambulance_01'; junction collision with vehicle 'f_c.3', time=414.90.\n"
+        "Warning: Vehicle 'f_d.4'; junction collision with vehicle 'f_e.5', time=416.50.\n",
+        encoding="utf-8",
+    )
+    assert parse_log(log, since=300.0) == {
+        "teleports": 0,  # before the dispatch: equal in every arm, not counted
+        "emergency_brakings": 1,
+        "sumo_collision_warnings": 2,
+        "ambulance_collisions": 1,
+    }
