@@ -81,7 +81,7 @@ SUMO  <--TraCI-->  Python engine (FastAPI)  <--WebSocket-->  React + R3F + Three
 | 3D assets | The team's deliveries in `3d_models/` (Git LFS), served unmodified at `/models/` by a Vite plugin; `@gltf-transform` for `check:assets` (Blender only for authoring, never at runtime) |
 | Data / eval | pandas, matplotlib |
 | Testing | pytest (backend), Vitest (frontend) |
-| Packaging | Local native Windows: a PowerShell launcher script (Sprint 10). No Docker, no CI/CD |
+| Packaging | Local native Windows: `start.ps1` launcher (Sprint 10). No Docker, no CI/CD |
 | Storage | CSV + `run_manifest.json` per run in v1 (no database) |
 
 ## 4. Repository structure
@@ -90,6 +90,7 @@ SUMO  <--TraCI-->  Python engine (FastAPI)  <--WebSocket-->  React + R3F + Three
 sparkathon26/                      (EmergencyFlow AI)
 ├── CLAUDE.md
 ├── README.md
+├── start.ps1                      # one-command local launcher (Sprint 10): backend + frontend
 ├── ATTRIBUTIONS.md                # license/credit + validation notes for every 3D asset
 ├── .env.example                   # copy to .env (git-ignored): SUMO_HOME, EF_SCENARIO, EF_SEED, EF_SCALE
 ├── 3d_models/                     # team deliveries as received (Git LFS) + the asset workbook
@@ -150,6 +151,14 @@ Keep `prediction.py` out of the repo until post-v1.
 ### Prerequisites
 - SUMO 1.27.1 (Windows installer) with `SUMO_HOME` set and `%SUMO_HOME%\bin` on `PATH`. Shells opened before the install don't see them: restart, or rely on `.env`.
 - Python 3.13, Node.js LTS, Git + Git LFS.
+
+### One command (Sprint 10)
+```powershell
+.\start.ps1 -Setup        # first time: venv + pip, npm install, .env
+.\start.ps1               # backend + frontend, 4x4 at 1.5x, warm-up 120 s, OFF ghost; opens the browser
+.\start.ps1 -Prod         # production build served by vite preview (port 4173)
+```
+`start.ps1` (PowerShell 5.1) checks SUMO, the venv, `node_modules`, Git LFS pointers and free ports. It starts uvicorn without `--reload` and Vite (dev or preview), waits for `/api/health` and the page, and stops both process trees on Ctrl+C or when either exits. Logs go to `logs\`. Options: `-Scenario`, `-Scale`, `-Seed`, `-Warmup`, `-NoGhost`, `-NoBrowser`, `-BackendPort`, `-FrontendPort`. Another backend port reaches Vite through `EF_BACKEND`.
 
 ### Backend
 ```powershell
@@ -650,18 +659,20 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
 
 ## 15. Demo script
 
+Labels are the UI's own. The README has the same script for presenters.
+
 0. Setup:
    - Laptop on AC power, with Edge set to the RTX 4060 in Windows Graphics settings.
-   - Backend started with `EF_SCALE=1.5`; traffic is already flowing thanks to the warm-up.
-   - Press **Reset** before the run: the OFF ghost replays the first dispatch after a reset only.
+   - `.\start.ps1`: 4x4 at 1.5x with the warm-up, so traffic is already flowing; the OFF ghost on.
+   - If anyone dispatched since the start, press **Reset**: the OFF ghost replays the first dispatch after a reset only.
    - Open the page about 15 s early, so the models and the HDRI sky are in before anyone drives.
    - A second screen may open the page as an observer.
-1. Heavy traffic (`--scale 1.5`), ambulance parked, mode OFF. The Chase view shows the city overview until dispatch; **C** cycles Chase / Orbit / Map.
-2. Press **Start Emergency**: show normal-signal delay; the OFF ghost appears.
+1. Heavy traffic, ambulance parked, mode OFF. The Chase view shows the city overview until dispatch; **C** cycles Chase / Orbit / Map.
+2. Press **Dispatch ambulance** and drive (W, A/D at the hints): show normal-signal delay; the translucent OFF ghost sets off too.
 3. Switch to BASIC: the signal turns green on approach after yellow + all-red clearance.
-4. Switch to COORD: downstream junctions prepare; route overlay shown.
-5. Press **Create Accident**: route recalculates, new ETA shown.
-6. Show the comparison chart **inside the app**. Switching windows or tabs releases the keys and the ambulance coasts to a stop, by design.
+4. Switch to COORD: downstream junctions prepare ("prepared ahead"); route overlay shown.
+5. Press **Create accident**: "Route compromised", the route recalculates, the ETA change is shown; the ghost meets the same accident.
+6. On arrival the HUD shows the time saved against the ghost (measured). Press **R** for the comparison chart **inside the app**: batch results per arm with CIs, background delay and safety. Switching windows or tabs releases the keys and the ambulance coasts to a stop, by design.
 
 ## 16. Do / Don't
 

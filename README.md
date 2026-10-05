@@ -7,6 +7,21 @@ An open, reproducible **simulation testbed** for emergency-vehicle signal priori
 
 See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 
+## Quick start (Windows, PowerShell, from the repo root)
+
+Needs SUMO 1.27.1 (with `SUMO_HOME` set), Python 3.13, Node.js LTS and Git LFS (see Prerequisites).
+
+```powershell
+git lfs install; git lfs pull       # the team's 3D models
+.\start.ps1 -Setup                  # first time: Python venv + packages, npm packages, .env
+.\start.ps1                         # the demo: 4x4 city, heavy traffic; opens http://localhost:5173
+```
+
+`start.ps1` starts the backend (SUMO + API) and the frontend, waits until both answer, opens the browser and stops everything on **Ctrl+C**. Logs go to `logs\`.
+- **Options:** `-Scenario grid2x2`, `-Scale 1.0`, `-Seed 7`, `-Warmup 60`, `-NoGhost`, `-NoBrowser`, `-BackendPort` / `-FrontendPort`.
+- **Production build:** `-Prod` builds the frontend and serves it with `vite preview` on port 4173.
+- **Script blocked by policy?** Run `powershell -ExecutionPolicy Bypass -File .\start.ps1`.
+
 ## Status
 
 | Sprint | Deliverable | State |
@@ -38,7 +53,7 @@ Copy-Item .env.example .env                       # local settings, git-ignored;
 cd frontend; npm install; cd ..
 ```
 
-The commands call `.venv\Scripts\python.exe` directly, so you don't need to activate the venv. That avoids PowerShell's script execution policy. In VS Code, pick `backend\.venv\Scripts\python.exe` as the interpreter so imports resolve.
+`.\start.ps1 -Setup` does the same. The commands call `.venv\Scripts\python.exe` directly, so you don't need to activate the venv. That avoids PowerShell's script execution policy. In VS Code, pick `backend\.venv\Scripts\python.exe` as the interpreter so imports resolve.
 
 ## Drive the ambulance
 
@@ -135,11 +150,24 @@ The first screen that clicks **Dispatch** drives. Every other screen is an obser
 - **Handing over:** the driver can click **Release control**, and **Reset** also frees control.
 - **Reconnects:** if the driver's tab loses its connection, it gets control back when it reconnects within 10 s. Any page reconnects on its own after a backend restart, and reloads the map if the scenario changed.
 
+### Demo script
+
+1. **Setup:** laptop on AC power, Edge on the NVIDIA GPU (below), `.\start.ps1`. Open the page about 15 s early, so the models and the sky are in. A second screen may open the same page as an observer.
+2. **The city:** heavy traffic, signals **OFF**, ambulance parked. **C** cycles Chase / Orbit / Map. If anyone has dispatched since the start, press **Reset** first: the OFF ghost replays the first mission after a reset only.
+3. **Dispatch ambulance**, drive with **W**, follow the suggested turns (**A**/**D**). The translucent **OFF ghost** sets off with you.
+4. Switch to **BASIC**: the next signal turns green ahead of you, after 4 s of yellow and 2 s of all-red. The Safety log shows each step.
+5. Switch to **COORD**: junctions further ahead are "prepared ahead", and queues clear before you arrive.
+6. **Create accident**: the HUD shows **Route compromised**, the route goes round it with the new ETA, and the ghost meets the same accident.
+7. Arrive: the HUD shows the OFF ghost's time and what you **saved**, measured on the same traffic. Press **R** for the batch experiment results: travel time per arm with confidence intervals, and the cost to background traffic.
+
+Switching windows or tabs releases the keys and the ambulance coasts to a stop, by design.
+
 ### Demo settings
 
 - **Warm-up:** the backend fast-forwards 120 s on start and after Reset, so traffic is already flowing (`EF_WARMUP_S` in `.env`).
-- **Heavy traffic:** `EF_SCALE=1.5`.
-- **Bigger city:** `EF_SCENARIO=grid4x4` for the 16-junction grid.
+- **Heavy traffic:** `EF_SCALE=1.5` (`start.ps1`'s default).
+- **Bigger city:** `EF_SCENARIO=grid4x4` for the 16-junction grid (`start.ps1`'s default).
+- **OFF ghost:** `EF_GHOST=1` (default); it runs a second SUMO process.
 
 **Plug the laptop in and run Edge on the NVIDIA GPU for demos:** Windows Settings → Display → Graphics → Microsoft Edge → High performance. Otherwise Edge uses the Intel UHD, even when plugged in. Open the page about 15 s before driving, so the models and the sky are in.
 
