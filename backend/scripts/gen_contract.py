@@ -128,7 +128,7 @@ def server_examples() -> dict[str, tuple[str, Any]]:
             queue=3.5,
             signal=0.0,
         ),  # fmt: skip
-        metrics=MetricsMsg(eta=31.4, signals_preempted=2),
+        metrics=MetricsMsg(eta=31.4, signals_preempted=2, queue_cleared=1),
         safety=SafetyMsg(
             violations=0,
             collisions=0,

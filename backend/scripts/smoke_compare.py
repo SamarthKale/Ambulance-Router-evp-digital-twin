@@ -1,4 +1,4 @@
-"""OFF vs BASIC smoke comparison on ONE seed. Not the evaluation (that is Sprint 9).
+"""OFF vs BASIC vs COORD smoke comparison on ONE seed. Not the evaluation (that is Sprint 9).
 
 Same scripted mission in both modes: depot -> straight at A0 -> left at B0 -> right at B1
 -> hospital, full throttle. Background delay is measured over the same fixed window in
@@ -31,6 +31,7 @@ class MissionResult:
     stopped_s: float  # ambulance standing still while en route
     stops: int  # times it came to a standstill en route
     preemptions: int
+    queues_cleared: int
     violations: int
     collisions: int
     background_halted_veh_s: float  # other vehicles standing still, summed, over HORIZON_S
@@ -81,6 +82,7 @@ def run_mission(mode: Mode, seed: int = 42, scale: float = 1.0) -> MissionResult
             stopped_s=round(stopped_s, 1),
             stops=stops,
             preemptions=state.safety.signals_preempted,
+            queues_cleared=state.queues_cleared,
             violations=state.safety.violations,
             collisions=state.safety.collisions,
             background_halted_veh_s=round(background, 1),
@@ -90,22 +92,24 @@ def run_mission(mode: Mode, seed: int = 42, scale: float = 1.0) -> MissionResult
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="OFF vs BASIC on one seed (smoke test)")
+    parser = argparse.ArgumentParser(description="OFF vs BASIC vs COORD on one seed (smoke)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--scale", type=float, default=1.0)
     args = parser.parse_args(argv)
-    results = [run_mission(mode, args.seed, args.scale) for mode in ("OFF", "BASIC")]
+    modes: tuple[Mode, ...] = ("OFF", "BASIC", "COORD")
+    results = [run_mission(mode, args.seed, args.scale) for mode in modes]
     print(f"Smoke comparison, seed {args.seed}, demand x{args.scale} (ONE seed: not evidence)")
     header = (
         f"{'mode':6} {'mission s':>9} {'stopped s':>9} {'stops':>5} {'preempt':>7} "
-        f"{'violations':>10} {'collisions':>10} {'bg halted veh*s':>15}"
+        f"{'q cleared':>9} {'violations':>10} {'collisions':>10} {'bg halted veh*s':>15}"
     )
     print(header)
     for r in results:
         mission = f"{r.mission_time:.1f}" if r.mission_time is not None else "n/a"
         print(
             f"{r.mode:6} {mission:>9} {r.stopped_s:>9.1f} {r.stops:>5} {r.preemptions:>7} "
-            f"{r.violations:>10} {r.collisions:>10} {r.background_halted_veh_s:>15.1f}"
+            f"{r.queues_cleared:>9} {r.violations:>10} {r.collisions:>10} "
+            f"{r.background_halted_veh_s:>15.1f}"
         )
     return 0
 

@@ -253,9 +253,22 @@ Implemented in Sprint 3 (`ai/rules.py` proposes; `safety/controller.py` decides)
 5. **Recovery:** yellow 4 s, all-red 2 s, then `setProgram("0")` + `setPhase(k)`, where k is the **other direction's green** (the normal green phase giving no green to the preempted approach). The cross traffic then keeps that green for at least **10 s** before the junction accepts a new preemption.
 6. **Routing of requests:** all requests go through the safety controller. Requests the controller rejects for the same reason on every tick are logged once.
 
-COORD mode adds two things, both rule-based rather than learned:
-- **Queue-aware lead time:** preempt when `ETA <= clearance + startup loss + queued vehicles x ~2 s headway`, so the queue has discharged before the ambulance arrives.
-- **Downstream preparation:** the same rule applied to the next 2–3 junctions on the route.
+COORD mode adds two things, both rule-based rather than learned. It was implemented in Sprint 7 in `ai/coord.py` (`CoordPreemption`), and requests still go through the safety controller.
+- **Queue-aware lead time:** preempt when `ETA <= clearance (6 s) + start-up loss (2 s) + queued vehicles / lanes x 2 s + 3 s margin`, capped at 30 s so the hold fits the 40 s limit. The queue has then discharged before the ambulance arrives.
+  - An empty approach gets an 11 s lead, shorter than BASIC's 15 s, so cross traffic loses less green.
+  - A long queue gets a longer lead.
+  - The log reason says why: e.g. "queue 7, lead 18 s".
+- **Downstream preparation:** the same rule is applied to the next 3 signalised junctions ahead (the next one plus two more).
+  - Junctions ahead are taken from the road graph along the suggested route while the driver follows it, otherwise from the driver's own plan for the next junction. SUMO's next-signal reading only refines the nearest one: the ambulance's SUMO route holds just two roads, so inside a junction SUMO sees no signal ahead.
+  - The log says "prepared ahead".
+- **Release:**
+  - The junction just crossed is released at once.
+  - A junction that drops off the route ahead is released after 2 s: a one-tick plan flicker on entering a road once released prepared junctions, and recovery plus cool-down then blocked them for 16 s.
+  - The 40 s limit still applies.
+- **Fail-safe:** as in BASIC, if the rule throws, every junction recovers and the mode switches to OFF (tested).
+- **Routing prices queues the same in BASIC and COORD**, so route choice doesn't depend on the signal mode and comparing modes doesn't also compare routes.
+- **Smoke result** (4x4 at 1.5x, seeds 3–7, autopilot, same routes): COORD beat BASIC on all 5 seeds, by 2–8 s. BASIC and COORD never stopped, against 43–71 s stopped in OFF. 0 violations, 0 collisions. The paired evaluation is Sprint 9.
+- **`metrics.queueCleared`:** counts the junctions in this mission whose waiting queue was gone before the ambulance got there: preempted with a queue in front, crossed without stopping on that approach. It is counted in BASIC and COORD alike.
 
 ## 8. Safety controller requirements
 
@@ -348,8 +361,8 @@ Field notes:
   - `drive`/`queue`/`signal` split the planned ETA.
   - `metrics.eta` repeats `route.eta`.
 - **`events` actions:** besides the ones above, `reroute` (autopilot only).
-- **`metrics`:** `signalsPreempted` counts preemptions that reached green. `timeSaved` stays `null` unless it was measured against the ghost run (section 14).
-- **`mode`:** `OFF` or `BASIC`. `COORD` is rejected until Sprint 7.
+- **`metrics`:** `signalsPreempted` counts preemptions that reached green. `queueCleared` counts this mission's junctions whose queue was gone before the ambulance arrived (null without a mission). `timeSaved` stays `null` unless it was measured against the ghost run (section 14).
+- **`mode`:** `OFF`, `BASIC` or `COORD`.
 
 Frontend → backend (commands). Every command except `drive` and `hello` carries an `id` and gets an ack once it has run. Driving commands, `set_mode` and `reset` are subject to the driver lock (section 2.8):
 ```json
@@ -541,7 +554,7 @@ Replies:
 | 4 | Demo hardening: protocol contract test, driver lock, reconnect handling, ambulance subscription, 4x4 grid + performance benchmark, live warm-up ✅ |
 | 5 | 3D scene with the delivered models: asset manifest (fit/pivot/aliases, placeholder fallback), instanced vehicles and lamps, merged multi-node buildings, lazy skybox, per-approach signal heads, hospital, chase camera, HUD placement, `/assets` page and `check:assets`; per-copy LOD; 60 FPS chase on the integrated GPU (4x4 at 1.5x) ✅ |
 | 6 | Shortest-path routing with live costs + route overlay + ETA, advisory turn hints, batch autopilot through the safety controller, seeded ETA-vs-actual check ✅ |
-| 7 | COORD: queue-aware preemption lead time + downstream junction preparation |
+| 7 | COORD: queue-aware preemption lead time + downstream junction preparation, queue-cleared metric ✅ |
 | 8 | Accident injection + automatic reroute + "route compromised" |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run** |
 | 10 | README, demo script hardening, one-command local launcher, final verification (local native Windows; no Docker, no CI/CD) |

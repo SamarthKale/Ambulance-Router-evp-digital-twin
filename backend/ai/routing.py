@@ -187,7 +187,9 @@ def drive_time(edge: RoadEdge, distance: float, traffic: EdgeTraffic | None) -> 
     if traffic is None:
         return distance / free
     moving = traffic.vehicles - traffic.halting
-    if moving <= 0:
+    if moving < max(1, edge.lanes):
+        # Fewer moving cars than lanes: the ambulance passes them (one car creeping up to a
+        # queue is not the flow speed: it once priced a 229 m road at 70 s).
         return distance / free
     moving_mean = traffic.mean_speed * traffic.vehicles / moving  # halted ones count ~0
     allowed = min(free, max(MIN_SPEED, moving_mean * AMBULANCE_SPEED_FACTOR))
@@ -219,10 +221,12 @@ def junction_delay(
     queue = queue_time(edge, conditions.traffic.get(edge.id)) * (1.0 if near else 0.5)
     if move.tls is None or move.link_index is None:
         return queue * 0.5, 0.0  # priority junction: the queue only merges
-    if conditions.mode == "COORD":
-        return 0.0, 0.0  # queue-aware lead time clears it before the ambulance arrives
-    if conditions.mode == "BASIC":
-        head_start = PREEMPT_LEAD_S - CLEARANCE_S  # green the queue gets before arrival
+    if conditions.mode in ("BASIC", "COORD"):
+        # Preempted: no red wait, and the queue gets BASIC's head start of green. COORD
+        # clears more of it, but the cleared cars then drive ahead of the ambulance, so it
+        # is priced the same: route choice must not depend on the signal mode, or comparing
+        # the modes would also compare routes.
+        head_start = PREEMPT_LEAD_S - CLEARANCE_S
         return max(0.0, queue - head_start), 0.0
     clock = conditions.signals.get(move.tls)
     program = conditions.programs.get(move.tls)

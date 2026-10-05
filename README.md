@@ -17,7 +17,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 4 | Demo hardening: protocol contract test, driver lock, reconnect, 4x4 grid + performance benchmark | done |
 | 5 | 3D city with the team's delivered models: asset manifest, instancing + LOD, chase/orbit/map cameras, HDRI sky, `/assets` page, `check:assets` | done |
 | 6 | Live-cost shortest-path routing: route overlay, ETA and distance, advisory turn hints, seeded ETA check | done |
-| 7 | COORD: queue-aware preemption lead time + downstream junction preparation | next |
+| 7 | COORD: queue-aware preemption lead time + downstream junction preparation | done |
+| 8 | Accident injection + automatic reroute + "route compromised" | next |
 
 ## Prerequisites (Windows)
 
@@ -94,7 +95,7 @@ How driving works:
 
 ### Signal modes
 
-The **OFF / BASIC** buttons switch modes; COORD arrives in Sprint 7.
+The **OFF / BASIC / COORD** buttons switch modes. All three are rule-based; nothing here is machine learning.
 
 - **OFF:** normal fixed-time signals.
 - **BASIC:** when the ambulance is 15 s or less from its next signal, that junction is handed to the safety controller:
@@ -103,6 +104,9 @@ The **OFF / BASIC** buttons switch modes; COORD arrives in Sprint 7.
   3. **Recovering** (violet ring): once the ambulance has passed, yellow 4 s, then all-red 2 s, then the normal program resumes at the other direction's green.
   - A preemption lasts at most 40 s.
   - Afterwards the cross traffic keeps its green for at least 10 s before the next preemption.
+- **COORD (coordinated):** the same safety controller, with two changes to when it is asked:
+  - **Queue-aware timing:** a junction starts clearing early enough for the cars queued in front of the ambulance to drive off before it arrives. That is 6 s of clearance + 2 s start-up + 2 s per queued car per lane + 3 s margin. An empty approach is held for 11 s instead of BASIC's 15 s, so cross traffic loses less green.
+  - **Next junctions prepared:** the same rule runs for the next two junctions on the suggested route while you follow it (the log says "prepared ahead"). The **Safety** card counts the queues cleared ahead of the ambulance.
 
 The HUD's **Safety** card shows the independent monitor's violation count, SUMO's collision count and the controller's latest decisions with reasons. Both counts must stay 0.
 
@@ -190,22 +194,25 @@ npm run check:assets -- --strict   # warnings fail too
 
 Use it to calibrate a model's rotation and size in `frontend/src/assets/manifest.ts`. The files themselves are never edited.
 
-## OFF vs BASIC smoke comparison (one seed)
+## OFF vs BASIC vs COORD smoke comparison (one seed)
 
 ```powershell
 cd backend
 .venv\Scripts\python.exe -m scripts.smoke_compare        # --seed N, --scale 1.5
 ```
 
-Same scripted trip in both modes: depot → straight at A0 → left at B0 → right at B1 → hospital. Seed 42, demand ×1.0:
+Same scripted trip in every mode: depot → straight at A0 → left at B0 → right at B1 → hospital. Seed 42, demand ×1.0:
 
 ```
-mode   mission s stopped s stops preempt violations collisions bg halted veh*s
-OFF         92.0      33.5     3       0          0          0          3946.3
-BASIC       47.5       0.0     0       3          0          0          4700.4
+mode   mission s stopped s stops preempt q cleared violations collisions bg halted veh*s
+OFF         92.0      33.5     3       0         0          0          0          3946.3
+BASIC       47.5       0.0     0       3         0          0          0          4700.4
+COORD       47.5       0.0     0       3         0          0          0          4889.3
 ```
 
-This is **one seed**: a smoke test, not evidence. The seeded multi-run evaluation is Sprint 9. Even so, it shows the trade-off honestly: the ambulance gets there in about half the time, while the other traffic spends about 19% more time stopped over the same 300 s window.
+This is **one seed**: a smoke test, not evidence. The seeded multi-run evaluation is Sprint 9 (see "Evaluation" below).
+- **The trade-off:** the ambulance gets there in about half the time, while the other traffic spends about 19–24 % more time stopped over the same 300 s window.
+- **COORD vs BASIC here:** COORD has no queues to clear on this light demand, so it matches BASIC.
 
 ## Tests and lint
 

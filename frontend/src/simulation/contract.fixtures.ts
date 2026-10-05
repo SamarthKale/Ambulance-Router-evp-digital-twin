@@ -105,7 +105,7 @@ export const stateDriving = {
   "metrics": {
     "eta": 31.4,
     "signalsPreempted": 2,
-    "queueCleared": null,
+    "queueCleared": 1,
     "timeSaved": null
   },
   "safety": {

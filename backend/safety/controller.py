@@ -158,6 +158,7 @@ class SafetyController:
         vehicle_class: str,
         current_state: str,
         eta_s: float,
+        note: str = "",
     ) -> Decision:
         j = self._junctions.get(tls_id)
         if j is None:
@@ -212,6 +213,8 @@ class SafetyController:
             f"ETA {eta_s:.1f} s: clearing {tls_id} for {approach} "
             f"(yellow {YELLOW_S:.0f} s, all-red {ALL_RED_S:.0f} s)"
         )
+        if note:
+            reason += f"; {note}"
         self._log(now, tls_id, vehicle_id, "preempt", True, reason)
         return Decision(True, reason, "accepted")
 

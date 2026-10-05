@@ -85,7 +85,7 @@ export interface RouteMsg {
 export interface MetricsMsg {
   eta: number | null; // s to the hospital along the suggested route
   signalsPreempted: number;
-  queueCleared: number | null;
+  queueCleared: number | null; // this mission: junctions whose queue was gone before arrival
   timeSaved: number | null; // only ever measured (ghost run)
 }
 
