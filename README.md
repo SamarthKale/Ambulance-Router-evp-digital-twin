@@ -298,7 +298,7 @@ All numbers are **autopilot batch runs**, never the manual live demo. 4x4 grid, 
 
 What the experiments show:
 - **Signal priority roughly halves the ambulance's travel time** at every demand: −44 s at x0.75, −60 s at x1.0, −103 s at x1.5 and −113 to −119 s at x2.0 (all p ≤ 0.002). The ambulance stops at no red light, and the time for the queue in front of it to clear drops from 5.4 s to 1.5 s per junction.
-- **Background traffic pays no measurable price:** the change in its total time loss is within ±0.5 % and never significant, at any demand. With short tuned cycles, the 4 s yellow, 2 s all-red and recovery cost cross traffic little.
+- **Background traffic pays no measurable price:** with BASIC or COORD the change in its total time loss stays within ±0.7 % and is never significant, at any demand. With short tuned cycles, the 4 s yellow, 2 s all-red and recovery cost cross traffic little.
 - **COORD is not better than BASIC here.** The paired difference is under 5 s at every demand, and never significant (p ≥ 0.28). The cycles tuned for the demand are 28-36 s, so the queues COORD clears early are short. On the network's own 74 s program, a 5-seed smoke test had COORD 2-8 s ahead.
 - **Live re-routing doesn't help without incidents:** with BASIC or COORD, dynamic and static routing differ by under 6 s, and the difference is never significant at x1.0 and above. Its value is the accident case: "Route compromised" and the way round.
 - **Crossing reds without priority is faster than waiting, but unsafe.** `off_realistic` saves 17-34 s. In 12 of its 140 runs the ambulance was in a junction collision: 22 events. SUMO's red-crossing model doesn't yield to cross traffic. Signal priority saves 2.5-4x as much time, with no ambulance collision at all.

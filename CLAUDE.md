@@ -651,7 +651,7 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
 - **Results (Sprint 9, 560 runs; the README has the tables):**
   - **Coverage:** 40 seeds at x1.5 and 10 each at x0.75, x1.0 and x2.0. Pairing was verified everywhere; 1 run was excluded (not arrived) and none teleported.
   - **Travel time vs baseline:** BASIC and COORD cut it at every demand (−44 / −60 / −103 / −113 to −119 s at x0.75 / 1.0 / 1.5 / 2.0, all p ≤ 0.002) to 84-99 s. They remove every red-light stop and cut the time for the queue ahead to clear from 5.4 s to 1.5 s.
-  - **Background time loss:** no significant change at any demand (within ±0.5 %).
+  - **Background time loss:** no significant change at any demand (within ±0.7 % with BASIC or COORD).
   - **COORD vs BASIC:** not significant at any demand (|difference| < 5 s, p ≥ 0.28). Tuned 28-36 s cycles leave short queues.
   - **Dynamic vs static routing:** no significant gain without incidents.
   - **`off_realistic`:** −17 to −34 s, with the ambulance collisions above.
