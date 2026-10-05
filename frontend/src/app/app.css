@@ -22,12 +22,14 @@ body,
   overflow: hidden;
 }
 
+/* widths and margins come from dashboard/layout.ts (inline styles), shared with the camera */
 .hud {
   position: absolute;
   top: 12px;
-  left: 12px;
-  width: 300px;
   max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -213,6 +215,40 @@ button:disabled {
 .small-button {
   padding: 2px 8px;
   font-size: 12px;
+}
+
+.segmented .label {
+  min-width: 64px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.segmented button.active {
+  background: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+button.primary {
+  background: #b91c1c;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.asset-status {
+  padding: 0 2px;
+}
+
+/* narrow screens: the safety panel drops to the bottom-right corner, compact */
+@media (max-width: 1099px) {
+  .hud-right {
+    top: auto;
+    bottom: 12px;
+    max-height: 35%;
+  }
 }
 
 .banner {

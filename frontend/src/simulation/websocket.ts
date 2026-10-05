@@ -67,8 +67,28 @@ export class SimSocket {
     private readonly clientId: string,
   ) {}
 
+  /**
+   * Opens the socket one task later. React StrictMode (development) mounts, unmounts and
+   * remounts every effect, so an immediate open would create a socket that is closed while
+   * still connecting: the browser warns, and the dev server's proxy, already relaying the
+   * backend's first state tick into it, logs "ws proxy error: write ECONNABORTED".
+   * close() cancels the pending open, so only one socket is ever created.
+   */
   connect(): void {
     this.stopped = false;
+    useSim.getState().setConnection("connecting");
+    this.schedule(0);
+  }
+
+  private schedule(delayMs: number): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (!this.stopped) this.open();
+    }, delayMs);
+  }
+
+  private open(): void {
     useSim.getState().setConnection("connecting");
     const ws = new WebSocket(this.url);
     this.ws = ws;
@@ -90,7 +110,7 @@ export class SimSocket {
       this.ws = null;
       useSim.getState().setConnection("closed");
       if (this.stopped) return;
-      this.retryTimer = setTimeout(() => this.connect(), this.retryMs);
+      this.schedule(this.retryMs);
       this.retryMs = Math.min(this.retryMs * 2, RETRY_MAX_MS);
     };
   }
@@ -110,6 +130,7 @@ export class SimSocket {
   close(): void {
     this.stopped = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     const ws = this.ws;
     this.ws = null;
     ws?.close();

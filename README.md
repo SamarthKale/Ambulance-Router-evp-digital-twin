@@ -15,7 +15,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 2 | Ambulance + manual WASD driving, FastAPI WebSocket, React Three Fiber top-down view | done |
 | 3 | Safety controller + independent safety monitor + BASIC signal preemption (OFF/BASIC) | done |
 | 4 | Demo hardening: protocol contract test, driver lock, reconnect, 4x4 grid + performance benchmark | done |
-| 5 | 3D scene with the delivered models (instanced traffic, asset manifest) | next |
+| 5 | 3D city with the team's delivered models: asset manifest, instancing + LOD, chase/orbit/map cameras, HDRI sky, `/assets` page, `check:assets` | done |
+| 6 | Shortest-path routing with live costs, route overlay, ETA | next |
 
 ## Prerequisites (Windows)
 
@@ -56,7 +57,18 @@ Open **http://localhost:5173**, click **Dispatch ambulance** and drive from the 
 | W / S | Throttle / brake (hold) |
 | A / D | Turn left / right at the next junction (tap). A turn pressed inside a junction is queued for the next one |
 | Q / E | Change lane left / right. Left-hand traffic: the curb lane is on the left |
-| F | Follow the ambulance on/off (mouse: drag to pan, wheel to zoom) |
+| C | Camera: **Chase** (behind the ambulance; a city overview while none is out), **Orbit** (free: drag to rotate, right-drag to pan, wheel to zoom), **Map** (2D) |
+| F | Map view: follow the ambulance on/off (off shows the whole map) |
+
+### The 3D city
+
+- **Source of truth:** the roads, signals and traffic all come from SUMO.
+- **City:** the team's delivered models furnish it.
+  - **Placement:** buildings line every block. The shops (bazaar) with an auto-rickshaw stand and the petrol station are on the depot road, and the hospital stands at the destination.
+  - **Signal heads:** one per approach, with the lamps lit from the live signal state.
+  - **Street furniture:** trees, streetlights, zebra crossings, medians and the rest.
+- **Map view:** also shows one disc per signal link (a junction has no single colour) and the junction names.
+- **Model files:** they are used exactly as delivered (`3d_models/`, served at `/models/`). All corrections live in the asset manifest. If a file can't load, a grey box (its placeholder) is drawn and the app keeps running.
 
 How driving works:
 - The ambulance obeys red lights and right of way.
@@ -92,16 +104,22 @@ The first screen that clicks **Dispatch** drives. Every other screen is an obser
 - **Heavy traffic:** `EF_SCALE=1.5`.
 - **Bigger city:** `EF_SCENARIO=grid4x4` for the 16-junction grid.
 
-**Plug the laptop in for demos.** Measured on this laptop:
+**Plug the laptop in and run Edge on the NVIDIA GPU for demos:** Windows Settings → Display → Graphics → Microsoft Edge → High performance. Otherwise Edge uses the Intel UHD, even when plugged in. Open the page about 15 s before driving, so the models and the sky are in.
 
-| | Plugged in (RTX 4060) | On battery (Intel UHD) |
+3D scene, Edge at 1600x900, plugged in. 4x4 grid at 1.5x (~540 vehicles), driving in BASIC:
+
+| View | RTX 4060 | Intel UHD |
 |---|---|---|
-| 2x2 top-down view | 240 FPS | 144 FPS |
-| 4x4 at 1.5x (~490 vehicles) | not measured | 96 FPS median, 21 FPS dips |
-| Backend tick (2x2) | 1.9 ms | 5.4 ms |
-| Backend tick (4x4 at 1.5x) | 7.8 ms | ~30 ms |
+| Chase | 144 FPS (display cap) | 60 median, 53 min |
+| Orbit | 144 | 63 / 61 |
+| City overview | 144 | 63 / 47 |
+| Map (2D) | 144 | 136 / 133 |
 
-Instancing the vehicles in Sprint 5 removes the 4x4 FPS dips. Keypress to the first responding simulation tick takes 28–57 ms median.
+- **2x2 at 1.5x:** chase is 144 FPS on the RTX 4060 and 62 / 55 on the Intel UHD.
+- **Draw calls:** at most ~80 (one mesh per car in Sprint 4 was ~957).
+- **Response time:** keypress to the first responding simulation tick takes 45 ms median on the RTX 4060 and 70 ms on the Intel UHD.
+- **Battery:** not measured this sprint. In Sprint 4, SUMO ran about 4x slower on battery.
+- **Backend tick:** 1.9 ms (2x2) and 7.8 ms (4x4 at 1.5x) plugged in, out of a 100 ms budget.
 
 ## Headless run
 
@@ -135,7 +153,25 @@ Options:
 .venv\Scripts\python.exe -m scripts.gen_contract    # run after ANY change to api/protocol.py, then fix state.ts until `npm run typecheck` passes
 ```
 
-`gen_contract` regenerates `frontend/src/simulation/contract.fixtures.ts` from the backend's message models. If the frontend types drift from the backend, TypeScript and `pytest` both fail.
+`gen_contract` regenerates two things:
+- `frontend/src/simulation/contract.fixtures.ts`, from the backend's message models. If the frontend types drift from the backend, TypeScript and `pytest` both fail.
+- the network fixtures the city layout tests use.
+
+### 3D assets (from `frontend\`)
+
+```powershell
+npm run check:assets            # every model: triangles, size before/after fit, parts, LFS pointers,
+                                # ATTRIBUTIONS rows, manifest owner/priority vs the workbook
+npm run check:assets -- --strict   # warnings fail too (CI)
+```
+
+**http://localhost:5173/assets** (dev server only) shows every model on its own turntable:
+- axes (+Z = forward), a 1 m grid, a 5 m ruler and the bounding box
+- size, triangles and draw calls
+- load status
+- a "copy manifest entry" button
+
+Use it to calibrate a model's rotation and size in `frontend/src/assets/manifest.ts`. The files themselves are never edited.
 
 ## OFF vs BASIC smoke comparison (one seed)
 
@@ -164,8 +200,8 @@ cd backend
 .venv\Scripts\black.exe --config pyproject.toml --check . ..\scenarios
 
 cd ..\frontend
-npm run test        # Vitest: coordinates, key mapping, store, protocol parsing, road geometry
-npm run build       # strict TypeScript check + production build
+npm run test        # Vitest: coordinates, keys, store, protocol, geometry, city layout, asset pipeline, workbook
+npm run build       # strict TypeScript check + production build (copies 3d_models/ into dist/models/)
 ```
 
 ## Scenario: `scenarios/grid2x2`
@@ -203,4 +239,7 @@ Regenerate (from `backend\`):
 - **Leftover `sumo.exe`**: shouldn't happen. The backend owns the SUMO process and kills it on exit, and SUMO quits by itself if its client dies. Check with `Get-Process sumo`.
 - **Page says "Backend not reachable"**: start the backend first (terminal 1). `http://127.0.0.1:8000/api/health` should report `running`.
 - **Open `http://localhost:5173`, not `127.0.0.1:5173`**: Vite listens on `localhost`, which Windows resolves to IPv6 `::1`.
+- **`[vite] ws proxy error: ECONNRESET` in the frontend terminal:** the backend went away mid-connection, e.g. `uvicorn --reload` restarting after a backend file changed. The page reconnects on its own. Page loads and reloads themselves no longer log it: the socket opens only once under React StrictMode, and the skybox worker's dependency is pre-bundled, so Vite no longer force-reloads the page.
+- **Grey boxes instead of buildings and cars:** the model files are missing or are Git LFS pointers. Run `git lfs pull`, then `npm run check:assets` (it names each problem file).
+- **Low FPS:** check which GPU Edge uses (Windows Graphics settings above). The HUD shows FPS, draw calls and triangles.
 - **How long does live traffic last?** The live server generates background traffic for 24 h (`routes.live.rou.xml`). Experiments and tests use exactly 1 h (`routes.rou.xml`) so results stay comparable.

@@ -205,6 +205,10 @@ export interface Frame {
 
 export type ConnectionStatus = "connecting" | "open" | "closed";
 
+/** Camera: behind the ambulance (overview while none is out), free orbit, or 2D map. */
+export type ViewMode = "chase" | "orbit" | "top";
+export const VIEW_MODES: ViewMode[] = ["chase", "orbit", "top"];
+
 export interface DriveKeys {
   throttle: boolean;
   brake: boolean;
@@ -226,9 +230,11 @@ export interface SimStore {
   keys: DriveKeys; // local key state, shown instantly in the HUD
   pendingInput: { at: number; speed: number } | null;
   latencyMs: number[]; // W press -> first tick in which the ambulance speeds up
-  follow: boolean;
+  follow: boolean; // top view: keep the ambulance centred
+  view: ViewMode;
   fps: number;
   drawCalls: number;
+  triangles: number;
   setConnection: (connection: ConnectionStatus) => void;
   setNetwork: (network: NetworkMsg) => void;
   receiveState: (msg: StateMsg, now: number) => void;
@@ -236,7 +242,9 @@ export interface SimStore {
   receiveSession: (msg: SessionMsg) => void;
   setKeys: (keys: DriveKeys, now: number) => void;
   toggleFollow: () => void;
-  setRenderStats: (fps: number, drawCalls: number) => void;
+  setView: (view: ViewMode) => void;
+  cycleView: () => void;
+  setRenderStats: (fps: number, drawCalls: number, triangles?: number) => void;
 }
 
 export function ambulanceOf(msg: StateMsg | undefined): VehicleMsg | undefined {
@@ -254,8 +262,10 @@ export const useSim = create<SimStore>()((set, get) => ({
   pendingInput: null,
   latencyMs: [],
   follow: true,
+  view: "chase",
   fps: 0,
   drawCalls: 0,
+  triangles: 0,
 
   setConnection: (connection) => set({ connection }),
   setNetwork: (network) => set({ network }),
@@ -295,7 +305,12 @@ export const useSim = create<SimStore>()((set, get) => ({
   },
 
   toggleFollow: () => set({ follow: !get().follow }),
-  setRenderStats: (fps, drawCalls) => set({ fps, drawCalls }),
+  setView: (view) => set({ view }),
+  cycleView: () => {
+    const i = VIEW_MODES.indexOf(get().view);
+    set({ view: VIEW_MODES[(i + 1) % VIEW_MODES.length]! });
+  },
+  setRenderStats: (fps, drawCalls, triangles = 0) => set({ fps, drawCalls, triangles }),
 }));
 
 export function median(values: number[]): number | null {

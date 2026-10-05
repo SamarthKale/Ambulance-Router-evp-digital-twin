@@ -1,13 +1,28 @@
 import { Canvas } from "@react-three/fiber";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 
-import { TopDownScene } from "../components/TopDownScene";
+import { CityScene } from "../components/CityScene";
+import { SKY_COLOR } from "../components/Sky";
 import { Hud } from "../dashboard/Hud";
 import { useSim, type CommandBody } from "../simulation/state";
 import { useManualDrive } from "../simulation/useManualDrive";
 import { SimSocket, fetchNetwork, socketUrl, tabClientId } from "../simulation/websocket";
 
+// Dev-only asset inspection page (CLAUDE.md section 11); not part of the production bundle.
+const AssetsPage = import.meta.env.DEV ? lazy(() => import("../assets/AssetsPage")) : null;
+
 export function App() {
+  if (AssetsPage && window.location.pathname === "/assets") {
+    return (
+      <Suspense fallback={null}>
+        <AssetsPage />
+      </Suspense>
+    );
+  }
+  return <Simulation />;
+}
+
+function Simulation() {
   const network = useSim((s) => s.network);
   const connection = useSim((s) => s.connection);
   const role = useSim((s) => s.role);
@@ -31,7 +46,7 @@ export function App() {
         setError(null);
         const current = useSim.getState().network;
         if (!current || JSON.stringify(current) !== JSON.stringify(fetched)) {
-          useSim.getState().setNetwork(fetched); // unchanged map: keep the built geometry
+          useSim.getState().setNetwork(fetched); // unchanged map: keep the built city
         }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
@@ -47,7 +62,10 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "KeyF" && !e.repeat) useSim.getState().toggleFollow();
+      const target = e.target as HTMLElement | null;
+      if (e.repeat || target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.code === "KeyF") useSim.getState().toggleFollow();
+      if (e.code === "KeyC") useSim.getState().cycleView();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -55,9 +73,9 @@ export function App() {
 
   return (
     <div className="app">
-      <Canvas orthographic camera={{ position: [0, 500, 0.001], near: 0.1, far: 2000 }} dpr={[1, 2]}>
-        <color attach="background" args={["#111827"]} />
-        {network && <TopDownScene network={network} />}
+      <Canvas dpr={[1, 1.5]} gl={{ powerPreference: "high-performance", antialias: true }}>
+        <color attach="background" args={[SKY_COLOR]} />
+        {network && <CityScene network={network} />}
       </Canvas>
       <Hud
         network={network}

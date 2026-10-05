@@ -2,10 +2,19 @@ import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import type { WorldPoint } from "../simulation/coords";
-import { ribbonGeometry } from "./geometry";
+import {
+  groundPolygonGeometry,
+  rectsGeometry,
+  ribbonGeometry,
+  stripsGeometry,
+  type FlatStrip,
+} from "./geometry";
 
 function faceNormals(points: WorldPoint[]): Vector3[] {
-  const geometry = ribbonGeometry(points, 3);
+  return geometryNormals(ribbonGeometry(points, 3));
+}
+
+function geometryNormals(geometry: import("three").BufferGeometry): Vector3[] {
   const pos = geometry.getAttribute("position");
   const index = Array.from(geometry.getIndex()?.array ?? []);
   const v = (i: number) => new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
@@ -41,5 +50,38 @@ describe("ribbonGeometry", () => {
     for (const normal of faceNormals(points)) {
       expect(normal.y).toBeCloseTo(1);
     }
+  });
+});
+
+describe("generated ground layers face up", () => {
+  it("rectangles", () => {
+    const geometry = rectsGeometry([{ x0: 0, z0: 0, x1: 5, z1: 2 }, { x0: -3, z0: -9, x1: -1, z1: -4 }], 0.01);
+    for (const n of geometryNormals(geometry)) expect(n.y).toBeCloseTo(1);
+  });
+
+  it.each([
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+    [0.6, -0.8],
+  ])("strips along (%s, %s)", (ux, uz) => {
+    const strip: FlatStrip = { x: 3, z: -2, ux, uz, length: 4, width: 0.5 };
+    const geometry = stripsGeometry([strip]);
+    for (const n of geometryNormals(geometry)) expect(n.y).toBeCloseTo(1);
+    const pos = geometry.getAttribute("position");
+    const p = (i: number) => new Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+    const sides = [p(0).distanceTo(p(1)), p(1).distanceTo(p(2))].sort();
+    expect(sides[0]).toBeCloseTo(0.5);
+    expect(sides[1]).toBeCloseTo(4);
+    // the long side runs along u
+    const long = p(0).distanceTo(p(1)) > 1 ? p(1).sub(p(0)) : p(2).sub(p(1));
+    expect(Math.abs(long.normalize().dot(new Vector3(ux, 0, uz)))).toBeCloseTo(1);
+  });
+
+  it("polygons (junction shapes)", () => {
+    const square: WorldPoint[] = [[0, 0, 0], [10, 0, 0], [10, 0, 10], [0, 0, 10]];
+    for (const n of geometryNormals(groundPolygonGeometry(square, 0.01))) expect(n.y).toBeCloseTo(1);
+    for (const n of geometryNormals(groundPolygonGeometry([...square].reverse(), 0.01))) expect(n.y).toBeCloseTo(1);
   });
 });

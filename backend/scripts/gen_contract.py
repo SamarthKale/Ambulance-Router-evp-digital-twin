@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any, get_args
 
 from pydantic import BaseModel
@@ -38,6 +39,8 @@ from simulation.network import RoadNetwork
 from simulation.sumo import REPO_ROOT
 
 OUTPUT = REPO_ROOT / "frontend" / "src" / "simulation" / "contract.fixtures.ts"
+NETWORK_DIR = REPO_ROOT / "frontend" / "src" / "components" / "fixtures"
+NETWORK_SCENARIOS = ("grid2x2", "grid4x4")
 SERVER_TYPES = ("state", "ack", "error", "session")  # every message on /ws, server -> client
 
 
@@ -185,9 +188,22 @@ def render() -> str:
     return "\n".join(lines) + "\n"
 
 
+def network_fixtures() -> dict[Path, str]:
+    """Full GET /api/network payloads of the shipped scenarios, for the city layout tests."""
+    fixtures = {}
+    for scenario in NETWORK_SCENARIOS:
+        payload = NetworkMsg.model_validate(RoadNetwork(scenario).payload()).model_dump(mode="json")
+        fixtures[NETWORK_DIR / f"network.{scenario}.json"] = json.dumps(payload) + "\n"
+    return fixtures
+
+
 def main() -> int:
     OUTPUT.write_text(render(), encoding="utf-8", newline="\n")
     print(f"wrote {OUTPUT.relative_to(REPO_ROOT)}")
+    NETWORK_DIR.mkdir(exist_ok=True)
+    for path, text in network_fixtures().items():
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {path.relative_to(REPO_ROOT)}")
     return 0
 
 
