@@ -100,7 +100,11 @@ export const stateDriving = {
     "computedAt": 123.0,
     "drive": 27.9,
     "queue": 3.5,
-    "signal": 0.0
+    "signal": 0.0,
+    "compromised": true,
+    "compromisedBy": "A1_B1",
+    "etaChange": 6.2,
+    "blockedAhead": false
   },
   "metrics": {
     "eta": 31.4,
@@ -130,7 +134,18 @@ export const stateDriving = {
       }
     ]
   },
-  "incidents": []
+  "incidents": [
+    {
+      "id": "incident_1",
+      "type": "accident",
+      "edge": "A1_B1",
+      "lane": 0,
+      "x": 332.5,
+      "y": 454.8,
+      "angle": 90.0,
+      "since": 120.0
+    }
+  ]
 } satisfies StateMsg;
 
 export const stateIdle = {
@@ -458,10 +473,28 @@ export const commands = [
     "v": 1,
     "id": 6,
     "cmd": "release_control"
+  },
+  {
+    "v": 1,
+    "id": 7,
+    "cmd": "inject_incident",
+    "type": "accident",
+    "edge": "A0_B0"
+  },
+  {
+    "v": 1,
+    "id": 8,
+    "cmd": "inject_incident",
+    "type": "accident"
+  },
+  {
+    "v": 1,
+    "id": 9,
+    "cmd": "clear_incidents"
   }
 ] satisfies Command[];
 
-export const BACKEND_COMMANDS = ["spawn_ambulance", "drive", "turn", "lane", "set_mode", "reset", "hello", "release_control"] as const;
+export const BACKEND_COMMANDS = ["spawn_ambulance", "drive", "turn", "lane", "set_mode", "reset", "hello", "release_control", "inject_incident", "clear_incidents"] as const;
 export const BACKEND_SERVER_TYPES = ["state", "ack", "error", "session"] as const;
 export const BACKEND_ENUMS = {
   "role": [
@@ -500,5 +533,8 @@ export const BACKEND_ENUMS = {
   "routing": [
     "dynamic",
     "static"
+  ],
+  "incidentType": [
+    "accident"
   ]
 } as const;

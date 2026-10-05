@@ -26,6 +26,7 @@ from typing import Literal
 
 from ai.coord import PREPARE_AHEAD, CoordPreemption, Upcoming
 from ai.routing import (
+    INCIDENT_PENALTY_S,
     Conditions,
     EdgeTraffic,
     RoutePlan,
@@ -38,6 +39,7 @@ from ai.routing import (
 from ai.rules import AmbulanceView, Preempt, Release, RuleAction, basic_preemption
 from safety.controller import SafetyController, SafetyEvent, Stage, UnsafePlanError
 from safety.monitor import SafetyMonitor
+from simulation.incidents import MIN_ROAD_M, Incident, IncidentError, Incidents
 from simulation.manual_control import DEADMAN_S, OK, CommandResult, ManualController
 from simulation.network import RoadNetwork
 from simulation.sumo import STEP_LENGTH, Snapshot, SumoConfig, SumoSimulation, VehicleState
@@ -53,6 +55,8 @@ MAX_LAG_S = STEP_LENGTH
 RECENT_EVENTS = 8
 STATS_WINDOW = 300  # ticks (30 s) for the timing percentiles
 ROUTE_EVERY_S = 1.0  # re-plan on a timer (and on every new road), not every step
+COMPROMISED_SHOW_S = 10.0  # how long "route compromised" stays up after the reroute
+ACCIDENT_TURN_ROOM_M = 60.0  # default accident site: leave the driver room to turn away
 
 Mode = Literal["OFF", "BASIC", "COORD"]
 Routing = Literal["dynamic", "static"]  # live costs, or free-flow costs fixed at dispatch
@@ -94,7 +98,19 @@ class Reset:
     pass
 
 
-Command = SpawnAmbulance | Drive | Turn | ChangeLane | SetMode | Reset
+@dataclass(frozen=True)
+class InjectAccident:
+    edge: str | None = None  # None: the road after the ambulance's next junction
+
+
+@dataclass(frozen=True)
+class ClearIncidents:
+    pass
+
+
+Command = (
+    SpawnAmbulance | Drive | Turn | ChangeLane | SetMode | Reset | InjectAccident | ClearIncidents
+)
 
 
 @dataclass(frozen=True)
@@ -139,6 +155,17 @@ class RouteStatus:
     eta_s: float  # counted down since the plan was made
     distance_m: float  # remaining along the suggested route, from where the ambulance is
     follows: bool  # the road the ambulance will take next is the suggested one
+    compromised_by: str | None = None  # an accident hit the route (shown for a while)
+    eta_change_s: float | None = None  # new ETA minus the ETA before the accident
+    blocked_ahead: bool = False  # the route still runs through an accident (no way round)
+
+
+@dataclass
+class _Compromise:
+    edge: str  # the accident that hit the suggested route
+    eta_before: float  # the route's ETA just before it
+    since: float
+    eta_change: float | None = None  # set by the first plan made after the accident
 
 
 @dataclass(frozen=True)
@@ -150,6 +177,7 @@ class EngineState:
     safety: SafetyStatus
     route: RouteStatus | None = None
     queues_cleared: int = 0  # this mission: queues discharged before the ambulance arrived
+    incidents: tuple[Incident, ...] = ()
 
 
 class SimulationEngine:
@@ -182,6 +210,9 @@ class SimulationEngine:
         self._coord_rule = coord_rule()
         self._queue_watch: dict[str, _QueueWatch] = {}
         self._queues_cleared = 0
+        self._incidents: Incidents | None = None
+        self._compromise: _Compromise | None = None
+        self._replan = False  # incidents changed: re-plan on this tick
         self.realtime = realtime
         self.mode: Mode = mode
         self.error: str | None = None
@@ -259,6 +290,8 @@ class SimulationEngine:
         conn = self._sim.connection
         self._manual = ManualController(conn, self.network, self._clock, self._deadman_s)
         self._lights = TrafficLights(conn)
+        self._incidents = Incidents(conn, self.network)
+        self._compromise, self._replan = None, False
         self._controller = SafetyController(self.tables)
         self._monitor = SafetyMonitor(self.tables)
         self._collisions = 0
@@ -282,6 +315,7 @@ class SimulationEngine:
         self._sim = None
         self._manual = None
         self._lights = None
+        self._incidents = None
 
     def tick(self) -> EngineState:
         started = time.perf_counter()
@@ -312,6 +346,7 @@ class SimulationEngine:
             self._safety_status(),
             route,
             self._queues_cleared,
+            self._incidents.active if self._incidents is not None else (),
         )
         self._latest = state
         self._tick_ms.append((time.perf_counter() - started) * 1000)
@@ -334,9 +369,11 @@ class SimulationEngine:
         plan = self._route
         stale = plan is None or start != self._route_start
         if plan is not None and self.routing == "dynamic":
-            stale = stale or snap.time - plan.computed_at >= ROUTE_EVERY_S - 1e-6
+            due = snap.time - plan.computed_at >= ROUTE_EVERY_S - 1e-6
+            stale = stale or due or self._replan
         elif plan is not None and start in plan.edges:
             stale = False  # static: keep the dispatch plan while the ambulance stays on it
+        self._replan = False
         if stale:
             hospital = self.network.hospital
             conditions = self._conditions(snap, vehicle)
@@ -367,15 +404,48 @@ class SimulationEngine:
             or ambulance.planned_turn is None
             or ambulance.planned_turn.edge == ahead[1]
         )
+        eta = max(0.0, plan.predicted_eta_s - (snap.time - plan.computed_at))
+        blocked = self._accidents_ahead(ahead, pos)
+        compromise = self._compromise
+        if compromise is not None:
+            if compromise.eta_change is None:
+                compromise.eta_change = round(eta - compromise.eta_before, 1)
+            expired = snap.time - compromise.since > COMPROMISED_SHOW_S
+            if expired and compromise.edge not in blocked:
+                self._compromise = compromise = None
         return RouteStatus(
             plan=plan,
             routing=self.routing,
             edges=ahead,
             turns=plan.turns[index:],
-            eta_s=max(0.0, plan.eta_s - (snap.time - plan.computed_at)),
+            eta_s=eta,
             distance_m=distance,
             follows=follows,
+            compromised_by=compromise.edge if compromise else None,
+            eta_change_s=compromise.eta_change if compromise else None,
+            blocked_ahead=bool(blocked),
         )
+
+    def _accidents_ahead(self, edges: Sequence[str], pos: float) -> set[str]:
+        """Roads of the route that still have an accident in front of the ambulance."""
+        if self._incidents is None:
+            return set()
+        ahead = set()
+        for incident in self._incidents.active:
+            if incident.edge in edges[1:] or (incident.edge == edges[0] and pos < incident.pos):
+                ahead.add(incident.edge)
+        return ahead
+
+    def _incident_costs(self, vehicle: VehicleState, pos: float) -> dict[str, float]:
+        """Routing penalty per road with an accident still ahead of whoever enters it; the
+        ambulance already past one on its own road doesn't pay it."""
+        if self._incidents is None:
+            return {}
+        return {
+            i.edge: INCIDENT_PENALTY_S
+            for i in self._incidents.active
+            if not (i.edge == vehicle.edge and pos >= i.pos)
+        }
 
     def _remaining_m(self, edges: tuple[str, ...], pos: float) -> float:
         hospital = self.network.hospital
@@ -409,12 +479,14 @@ class SimulationEngine:
             for s in snap.signals
             if s.tls_id in self._programs
         }
+        _, manual, _ = self._require()
         return Conditions(
             now=snap.time,
             mode=self.mode,
             traffic=traffic,
             signals=signals,
             programs=self._programs,
+            incidents=self._incident_costs(vehicle, manual.lane_position),
         )
 
     def _autopilot(self) -> None:
@@ -654,6 +726,58 @@ class SimulationEngine:
                 return manual.request_lane(direction)
             case SetMode(mode=mode):
                 return self._set_mode(mode)
+            case InjectAccident(edge=edge):
+                return self._inject_accident(edge)
+            case ClearIncidents():
+                cleared = self._require_incidents().clear()
+                self._replan, self._compromise = True, None
+                if not cleared:
+                    return CommandResult(True, "no accidents to clear")
+                return CommandResult(True, f"cleared {cleared} accident(s)")
+
+    def _inject_accident(self, edge: str | None) -> CommandResult:
+        incidents = self._require_incidents()
+        route = self._latest.route if self._latest is not None else None
+        if edge is None:
+            edge = self._accident_site(route)
+            if edge is None:
+                return CommandResult(
+                    False, "no road ahead on the suggested route: dispatch first, or pick a road"
+                )
+        try:
+            incident = incidents.add_accident(edge, self._now)
+        except IncidentError as exc:
+            return CommandResult(False, str(exc))
+        self._replan = True
+        where = f"accident on {edge}: lane {incident.lane} blocked"
+        if route is None or edge not in route.edges:
+            return CommandResult(True, where)
+        self._compromise = _Compromise(edge, route.eta_s, self._now)
+        return CommandResult(True, f"{where}; route compromised, re-planning")
+
+    def _accident_site(self, route: RouteStatus | None) -> str | None:
+        """Default accident: the first road of the suggested route after the ambulance's
+        next junction, or the one after if that junction is too close to turn away from."""
+        if route is None or len(route.edges) < 2:
+            return None
+        _, manual, _ = self._require()
+        vehicle = self._latest.snapshot.vehicle(AMBULANCE_ID) if self._latest else None
+        inside = vehicle is None or vehicle.edge.startswith(":")
+        first = route.edges[0]
+        to_junction = self.graph.edges[first].length - (0.0 if inside else manual.lane_position)
+        candidates = route.edges[1:] if to_junction >= ACCIDENT_TURN_ROOM_M else route.edges[2:]
+        hospital = self.network.hospital.edge
+        blocked = self._require_incidents().blocked_edges()
+        for edge in candidates:
+            long_enough = self.graph.edges[edge].length >= MIN_ROAD_M
+            if edge != hospital and edge not in blocked and long_enough:
+                return edge
+        return None
+
+    def _require_incidents(self) -> Incidents:
+        if self._incidents is None:
+            raise RuntimeError("engine is not open")
+        return self._incidents
 
     def _set_mode(self, mode: Mode) -> CommandResult:
         if mode == self.mode:

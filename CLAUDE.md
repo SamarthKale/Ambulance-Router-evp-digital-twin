@@ -117,7 +117,8 @@ sparkathon26/                      (EmergencyFlow AI)
 │   ├── pyproject.toml             # pytest, ruff, black config
 │   ├── api/                       # protocol.py (v1 models), routes.py, websocket.py
 │   ├── simulation/                # sumo.py, engine.py, manual_control.py, vehicle.py, network.py,
-│   │                              # traffic_lights.py (the only signal actuator + net.xml tables)
+│   │                              # traffic_lights.py (the only signal actuator + net.xml tables),
+│   │                              # incidents.py (accident wrecks)
 │   ├── ai/                        # rules.py (BASIC), routing.py (live-cost routing); later COORD rules
 │   ├── safety/                    # controller.py, monitor.py, invariants.py (R1-R3), signal_table.py
 │   ├── scripts/                   # smoke_compare.py (OFF vs BASIC, one seed), benchmark.py,
@@ -238,9 +239,15 @@ cd ..\frontend; npm run test; npm run typecheck
     - BASIC: what 9 s of preempted green can't discharge.
     - COORD: 0.
   - **turns:** a few seconds per turn.
-  - **incidents:** a penalty, or a closed road.
+  - **incidents:** an accident adds 120 s to its road (a closed road would be infinite; v1 has accidents only). The penalty only steers the choice of route: the displayed ETA leaves it out, because live traffic around the wreck is the prediction.
 
   Prediction horizon: live queues and exact signal timing are used only for the next 30 s. Beyond that, the expected values take over (half the current queue, the program's average red wait); exact far-ahead predictions made routes chase greens that were gone on arrival. Live inputs come from TraCI subscriptions: one per road (mean speed, halting, vehicles) and each signal's next switch time. The route is re-planned every 1 s and on every new road, never every step. A new suggestion replaces the current one only if it is at least max(5 s, 10 %) faster, so the advice doesn't flip. Static routing (experiment arm) keeps the free-flow plan made at dispatch.
+- **Accidents** (Sprint 8, `simulation/incidents.py`):
+  - A wreck is a SUMO vehicle of vType `wrecked_car` (a copy of `car_sedan`; the id is the 3D asset key), standing with an indefinite stop in the curb lane, 55 % along the road. SUMO's traffic reacts to it: vehicles behind merge into the open lane, so the road stays passable but slow. The state message leaves wrecks out of `vehicles` and lists them in `incidents`.
+  - Placement: by default the first road of the suggested route after the ambulance's next junction, or the one after if that junction is less than 60 m away (room to turn away). Unknown roads, roads under 60 m, the hospital road and a second accident on the same road are rejected with a reason.
+  - On injection the route is re-planned at once. If the accident is on the suggested route, `route.compromised` is set for 10 s with the ETA change (new ETA minus the ETA just before), and for as long as the route still passes it.
+  - Static routing (experiment arm) keeps its map route through the accident and only flags it.
+  - Measured: a wreck left 15 min on the 2x2 at 1.5x gave 0 teleports, 0 collisions and 0 safety violations, with a queue of up to 9 halted vehicles behind it. Wrecks go on `clear_incidents` and on reset.
 - **Layering:** wrap TraCI calls in the `simulation/` layer. API handlers, AI modules and tests never import `traci` directly.
 
 ## 7. Signal preemption rules (BASIC mode)
@@ -336,12 +343,14 @@ Backend → frontend (state tick, every step at 10 Hz):
   "route": {"edges": ["A0_B0", "B0_B1", "B1_e1"],
             "turns": [{"junction": "B0", "turn": "left", "edge": "B0_B1"}, {"junction": "B1", "turn": "right", "edge": "B1_e1"}],
             "eta": 31.4, "distance": 512.0, "follows": true, "routing": "dynamic", "computedAt": 123.0,
-            "drive": 27.9, "queue": 3.5, "signal": 0.0},
+            "drive": 27.9, "queue": 3.5, "signal": 0.0,
+            "compromised": true, "compromisedBy": "A1_B1", "etaChange": 6.2, "blockedAhead": false},
   "metrics": {"eta": 31.4, "signalsPreempted": 2, "queueCleared": null, "timeSaved": null},
   "safety": {"violations": 0, "collisions": 0,
              "events": [{"t": 18.4, "junction": "B0", "vehicle": "ambulance_01", "action": "preempt",
                          "accepted": true, "reason": "ETA 14.5 s: clearing B0 for A0_B0 (yellow 4 s, all-red 2 s)"}]},
-  "incidents": []
+  "incidents": [{"id": "incident_1", "type": "accident", "edge": "A1_B1", "lane": 0,
+                 "x": 332.5, "y": 454.8, "angle": 90.0, "since": 120.0}]
 }
 ```
 Field notes:
@@ -359,12 +368,14 @@ Field notes:
   - `eta` is in seconds and counts down between re-plans; `distance` is the metres remaining along the route.
   - `follows` says whether the road the ambulance takes next is the suggested one.
   - `drive`/`queue`/`signal` split the planned ETA.
+  - `compromised` / `compromisedBy` / `etaChange`: an accident hit the route (section 6, Accidents). `blockedAhead`: the route still passes an accident, because there's no faster way round.
   - `metrics.eta` repeats `route.eta`.
 - **`events` actions:** besides the ones above, `reroute` (autopilot only).
 - **`metrics`:** `signalsPreempted` counts preemptions that reached green. `queueCleared` counts this mission's junctions whose queue was gone before the ambulance arrived (null without a mission). `timeSaved` stays `null` unless it was measured against the ghost run (section 14).
 - **`mode`:** `OFF`, `BASIC` or `COORD`.
+- **`incidents`:** active accidents: the wreck's centre, its lane (0 = curb) and its heading. Wrecks are not in `vehicles`.
 
-Frontend → backend (commands). Every command except `drive` and `hello` carries an `id` and gets an ack once it has run. Driving commands, `set_mode` and `reset` are subject to the driver lock (section 2.8):
+Frontend → backend (commands). Every command except `drive` and `hello` carries an `id` and gets an ack once it has run. Driving commands, `set_mode`, `reset` and the incident commands are subject to the driver lock (section 2.8):
 ```json
 {"v": 1, "cmd": "hello", "clientId": "tab-<uuid>"}                                           // first on every (re)connect; reply: session
 {"v": 1, "id": 7, "cmd": "release_control"}                                                  // driver hands over control
@@ -373,8 +384,9 @@ Frontend → backend (commands). Every command except `drive` and `hello` carrie
 {"v": 1, "id": 3, "cmd": "turn", "vehicle": "ambulance_01", "direction": "left|right"}     // intent for the next junction
 {"v": 1, "id": 4, "cmd": "lane", "vehicle": "ambulance_01", "direction": "left|right"}
 {"v": 1, "id": 6, "cmd": "reset"}                                                            // restarts SUMO (same seed)
-{"v": 1, "id": 2, "cmd": "set_mode", "mode": "OFF|BASIC|COORD"}                             // OFF releases all; COORD: Sprint 7
-{"v": 1, "id": 5, "cmd": "inject_incident", "type": "accident", "edge": "A0_B0"}            // Sprint 8
+{"v": 1, "id": 2, "cmd": "set_mode", "mode": "OFF|BASIC|COORD"}                             // OFF releases all
+{"v": 1, "id": 5, "cmd": "inject_incident", "type": "accident", "edge": "A0_B0"}            // edge optional: next road on the route
+{"v": 1, "id": 8, "cmd": "clear_incidents"}
 ```
 ```json
 {"v": 1, "type": "ack", "id": 3, "ok": false, "reason": "too late to turn right at A0: needs the inner lane, only 4 m left"}
@@ -488,7 +500,7 @@ Replies:
   - It is shown at 2048x1024: a box-filtered display copy, never a file edit.
   - Until then the sky is a plain colour and a generated room environment lights the models. That environment uses the same PMREM cube size as the skybox's (512), because a size change recompiles every material.
   - Main-thread stall when the sky goes in: 0.19 s. It was 2.1 s with mismatched sizes, and 0.47 s at full 4k.
-- **Lazy files:** the bus stop is fetched after the scene is interactive. The crashed car is used from Sprint 8 and fetched only when shown (`/assets` has a button).
+- **Lazy files:** the bus stop and the crashed car are fetched after the scene is interactive, so the first accident already shows the model.
 - **Placed in the city** (`components/cityLayout.ts`, deterministic, tested on the real 2x2 and 4x4 networks): nothing overlaps a road or another building, every signalised approach has one head, and zebras lie inside the junction box.
   - **Building rows:** they line every block, using the generic buildings (`building_01..05`) and Member 1's residential block.
   - **Depot road:** the shops (bazaar), with an auto-rickshaw stand and scooters. The petrol station sits across the road, with fuel pumps, a truck and a stop sign.
@@ -498,7 +510,8 @@ Replies:
   - **Parks:** footpaths, trees, grass and benches.
   - **Along every road:** trees, streetlights, hydrants and bins.
   - **At each junction mouth:** a raised median with the delivered divider segments, generated stop lines, zebras and lane markings, and a pedestrian signal per crossing.
-  - **Not placed in Sprint 5:** cones, barricade, road block, explosion marker and crashed car are incident props for Sprint 8. The flyover isn't placed because the grid has none. All of them are on `/assets`.
+  - **At an accident** (Sprint 8, `components/Incidents.tsx` + `incidentLayout.ts`, tested): the crashed car askew in its lane, a barrier behind it, a cone taper closing the lane towards the open one, a road-block marker upstream, the explosion marker for the first 4 s and a label.
+  - **Not placed:** the flyover, because the grid has none. It is on `/assets`.
 - **Dev-only `/assets` page** (`http://localhost:5173/assets`): every manifest asset in one canvas (drei `<View>`). Each card shows:
   - the model with axes (+Z = forward, blue), a 1 m grid, a 5 m ruler and the bounding box
   - fitted size against the placeholder, triangles against the budget, draws per copy against the file's meshes, parts, load status and time, and node names
@@ -555,7 +568,7 @@ Replies:
 | 5 | 3D scene with the delivered models: asset manifest (fit/pivot/aliases, placeholder fallback), instanced vehicles and lamps, merged multi-node buildings, lazy skybox, per-approach signal heads, hospital, chase camera, HUD placement, `/assets` page and `check:assets`; per-copy LOD; 60 FPS chase on the integrated GPU (4x4 at 1.5x) ✅ |
 | 6 | Shortest-path routing with live costs + route overlay + ETA, advisory turn hints, batch autopilot through the safety controller, seeded ETA-vs-actual check ✅ |
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation, queue-cleared metric ✅ |
-| 8 | Accident injection + automatic reroute + "route compromised" |
+| 8 | Accident injection + automatic reroute + "route compromised": wreck held in one lane in SUMO, incident props, accident penalty in routing, clear/reset ✅ |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run** |
 | 10 | README, demo script hardening, one-command local launcher, final verification (local native Windows; no Docker, no CI/CD) |
 

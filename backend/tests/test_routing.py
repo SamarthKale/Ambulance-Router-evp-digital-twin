@@ -10,6 +10,7 @@ import pytest
 from ai.routing import (
     AMBULANCE_TOP_SPEED,
     HEADWAY_S,
+    INCIDENT_PENALTY_S,
     Conditions,
     EdgeTraffic,
     Movement,
@@ -136,6 +137,22 @@ def test_closed_roads_are_avoided_and_no_way_means_no_route() -> None:
     assert plan is not None and "A" not in plan.edges
     both = Conditions(0.0, "BASIC", incidents={"A": math.inf, "B": math.inf})
     assert plan_route(graph, "S", 0.0, "D", 100.0, both) is None
+
+
+def test_an_accident_steers_the_route_but_is_not_counted_as_predicted_time() -> None:
+    graph = diamond()
+    free = plan_route(graph, "S", 0.0, "D", 100.0, Conditions(0.0, "BASIC"))
+    assert free is not None and free.edges[1] == "A" and free.incident_s == 0.0
+    accident = Conditions(0.0, "BASIC", incidents={"A": INCIDENT_PENALTY_S})
+    plan = plan_route(graph, "S", 0.0, "D", 100.0, accident)
+    assert plan is not None and "A" not in plan.edges and plan.incident_s == 0.0
+    # No way round: the route passes the accident; the penalty is in the cost (eta_s) but
+    # the prediction leaves it out (live traffic around the wreck is the prediction).
+    both = Conditions(0.0, "BASIC", incidents={"A": INCIDENT_PENALTY_S, "B": INCIDENT_PENALTY_S})
+    through = plan_route(graph, "S", 0.0, "D", 100.0, both)
+    assert through is not None and through.incident_s == INCIDENT_PENALTY_S
+    assert through.predicted_eta_s == pytest.approx(through.eta_s - INCIDENT_PENALTY_S)
+    assert through.predicted_eta_s == pytest.approx(free.eta_s, abs=0.01)
 
 
 def test_a_given_route_is_priced_like_the_search_prices_it() -> None:

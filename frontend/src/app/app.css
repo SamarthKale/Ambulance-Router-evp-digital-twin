@@ -262,6 +262,35 @@ button.primary:hover:not(:disabled) {
   color: #fbbf24;
 }
 
+.tag.warn {
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.compromised {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #ef4444;
+  background: rgba(153, 27, 27, 0.55);
+  color: #fee2e2;
+  animation: compromised-in 0.6s ease-out 2;
+}
+
+@keyframes compromised-in {
+  50% {
+    background: rgba(220, 38, 38, 0.85);
+  }
+}
+
+button.danger {
+  border-color: #f97316;
+  color: #fdba74;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #7c2d12;
+}
+
 .asset-status {
   padding: 0 2px;
 }

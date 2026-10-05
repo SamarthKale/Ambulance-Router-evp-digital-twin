@@ -24,6 +24,7 @@ from api.protocol import (
     ClientCommand,
     ErrorMsg,
     HealthMsg,
+    IncidentMsg,
     MetricsMsg,
     NetworkMsg,
     NextSignalMsg,
@@ -69,6 +70,7 @@ ENUMS: dict[str, tuple[type[BaseModel], str]] = {
     "turn": (PlannedTurnMsg, "turn"),
     "healthStatus": (HealthMsg, "status"),
     "routing": (RouteMsg, "routing"),
+    "incidentType": (IncidentMsg, "type"),
 }
 
 
@@ -83,6 +85,9 @@ def command_examples() -> list[dict[str, Any]]:
         {"v": 1, "id": 5, "cmd": "reset"},
         {"v": 1, "cmd": "hello", "clientId": "tab-0123456789"},
         {"v": 1, "id": 6, "cmd": "release_control"},
+        {"v": 1, "id": 7, "cmd": "inject_incident", "type": "accident", "edge": "A0_B0"},
+        {"v": 1, "id": 8, "cmd": "inject_incident", "type": "accident"},
+        {"v": 1, "id": 9, "cmd": "clear_incidents"},
     ]  # fmt: skip
     for example in examples:
         CLIENT_COMMAND.validate_python(example)  # every example is valid backend input
@@ -127,6 +132,10 @@ def server_examples() -> dict[str, tuple[str, Any]]:
             drive=27.9,
             queue=3.5,
             signal=0.0,
+            compromised=True,
+            compromised_by="A1_B1",
+            eta_change=6.2,
+            blocked_ahead=False,
         ),  # fmt: skip
         metrics=MetricsMsg(eta=31.4, signals_preempted=2, queue_cleared=1),
         safety=SafetyMsg(
@@ -139,6 +148,10 @@ def server_examples() -> dict[str, tuple[str, Any]]:
                                accepted=False, reason="unknown junction B1"),
             ],
         ),  # fmt: skip
+        incidents=[
+            IncidentMsg(id="incident_1", type="accident", edge="A1_B1", lane=0, x=332.5,
+                        y=454.8, angle=90.0, since=120.0),
+        ],  # fmt: skip
     )
     idle = StateMsg(
         seq=1,

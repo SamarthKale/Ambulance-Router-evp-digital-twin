@@ -34,7 +34,7 @@ def test_network_fixtures_are_up_to_date() -> None:
 
 
 def test_every_command_is_covered_by_an_example() -> None:
-    assert sorted(e["cmd"] for e in command_examples()) == sorted(command_names())
+    assert {e["cmd"] for e in command_examples()} == set(command_names())
 
 
 def test_every_server_message_type_is_listed() -> None:

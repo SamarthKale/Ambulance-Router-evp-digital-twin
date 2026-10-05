@@ -39,6 +39,9 @@ AMBULANCE_ACCEL = 3.5  # m/s^2 (vType accel)
 MIN_SPEED = 2.0  # m/s: even a crawling edge gets crossed eventually
 HEADWAY_S = 2.0  # s per queued vehicle and lane (saturation flow ~1800 veh/h/lane)
 PREDICTION_HORIZON_S = 30.0  # beyond this, expected values replace live predictions
+# An accident leaves one lane open, but clearance time is unknown and the bottleneck is
+# severe: routes avoid the road unless every alternative is this much slower.
+INCIDENT_PENALTY_S = 120.0
 CLEARANCE_S = YELLOW_MIN_S + ALL_RED_MIN_S
 TURN_PENALTY_S: Mapping[TurnKind, float] = {
     "straight": 0.0,
@@ -260,10 +263,17 @@ class RoutePlan:
     queue_s: float
     signal_s: float
     computed_at: float
+    # Accident penalties inside eta_s and drive_s: they steer the choice of route, but they
+    # are not a prediction (live traffic around the wreck is), so displays leave them out.
+    incident_s: float = 0.0
 
     @property
     def next_turn(self) -> RouteTurn | None:
         return self.turns[0] if self.turns else None
+
+    @property
+    def predicted_eta_s(self) -> float:
+        return self.eta_s - self.incident_s
 
 
 @dataclass(order=True)
@@ -307,11 +317,12 @@ def evaluate_route(
     now = conditions.now
     t = now + acceleration_loss(start_speed)
     drive, queue, signal = t - now, 0.0, 0.0
-    distance = 0.0
+    distance, incident = 0.0, 0.0
     for i, edge_id in enumerate(edges):
         edge = graph.edges.get(edge_id)
         if edge is None or math.isinf(conditions.incidents.get(edge_id, 0.0)):
             return None
+        incident += conditions.incidents.get(edge_id, 0.0)
         offset = start_pos if i == 0 else 0.0
         if i == len(edges) - 1:
             remaining = max(0.0, destination_pos - offset)
@@ -342,6 +353,7 @@ def evaluate_route(
         queue_s=round(queue, 2),
         signal_s=round(signal, 2),
         computed_at=now,
+        incident_s=incident,
     )
 
 

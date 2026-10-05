@@ -80,6 +80,26 @@ export interface RouteMsg {
   drive: number; // s of the planned ETA spent driving...
   queue: number; // ...waiting for queues to discharge...
   signal: number; // ...and waiting at red lights
+  // An accident hit the route: shown for a while after the re-plan, and as long as the
+  // route still runs through it.
+  compromised: boolean;
+  compromisedBy: string | null; // the road with the accident
+  etaChange: number | null; // s, new ETA minus the ETA just before the accident
+  blockedAhead: boolean; // the route still passes an accident (no faster way round)
+}
+
+export type IncidentType = "accident";
+
+/** A wrecked car blocking one lane mid-way along a road (drawn from here, not from vehicles). */
+export interface IncidentMsg {
+  id: string;
+  type: IncidentType;
+  edge: string;
+  lane: number; // 0 = curb lane
+  x: number; // m, SUMO coordinates of the wreck
+  y: number;
+  angle: number; // deg clockwise from north, along the road
+  since: number; // simulation time
 }
 
 export interface MetricsMsg {
@@ -116,7 +136,7 @@ export interface StateMsg {
   route: RouteMsg | null;
   metrics: MetricsMsg;
   safety: SafetyMsg;
-  incidents: string[]; // Sprint 8
+  incidents: IncidentMsg[];
 }
 
 export interface AckMsg {
@@ -213,7 +233,9 @@ export type Command =
   | { v: 1; id: number; cmd: "set_mode"; mode: SignalMode }
   | { v: 1; id: number; cmd: "reset" }
   | { v: 1; cmd: "hello"; clientId: string }
-  | { v: 1; id: number; cmd: "release_control" };
+  | { v: 1; id: number; cmd: "release_control" }
+  | { v: 1; id: number; cmd: "inject_incident"; type: IncidentType; edge?: string | null }
+  | { v: 1; id: number; cmd: "clear_incidents" };
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** A command before the socket stamps the protocol version and id. */
