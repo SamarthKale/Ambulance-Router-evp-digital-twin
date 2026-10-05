@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -12,9 +16,12 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 
-from api.websocket import OBSERVER_REASON
+from api.channel import ClientChannel
+from api.session import SessionManager
+from api.websocket import COMMAND_TIMEOUT_S, OBSERVER_REASON, RESET_TIMEOUT_S, handle_message
 from main import create_app
 from simulation.engine import SimulationEngine
+from simulation.manual_control import CommandResult
 from simulation.sumo import SumoConfig
 
 Msg = dict[str, Any]
@@ -148,6 +155,38 @@ def test_lock_is_released_when_the_driver_does_not_return(tmp_path: Path) -> Non
             assert hello(two, "tab-new-00002")["role"] == "free"
             two.send_json({"v": 1, "id": 2, "cmd": "spawn_ambulance"})
             assert wait_for(two, ack(2))["ok"] is True
+
+
+def test_reset_ack_waits_for_the_warm_up() -> None:
+    """Reset restarts SUMO and fast-forwards the live warm-up, which takes longer than an
+    ordinary command: its ack must report success, not 'simulation not responding'."""
+
+    class SlowResetEngine:
+        def submit(self, command: object) -> Future[CommandResult]:
+            future: Future[CommandResult] = Future()
+            delay = COMMAND_TIMEOUT_S + 0.5  # longer than any other command may take
+            threading.Timer(delay, future.set_result, [CommandResult(True, "restarted")]).start()
+            return future
+
+    async def run() -> dict[str, Any]:
+        session = SessionManager()
+        channel = ClientChannel()
+        session.connect(channel)
+        pending: set[asyncio.Task[None]] = set()
+        handle_message(
+            SlowResetEngine(),  # type: ignore[arg-type]
+            session,
+            channel,
+            json.dumps({"v": 1, "id": 9, "cmd": "reset"}),
+            pending,
+        )
+        await asyncio.gather(*pending)
+        acks = [json.loads(m) for m in await channel.next_batch()]
+        return next(m for m in acks if m["type"] == "ack")
+
+    ack_msg = asyncio.run(run())
+    assert ack_msg == {"v": 1, "type": "ack", "id": 9, "ok": True, "reason": "restarted"}
+    assert RESET_TIMEOUT_S >= 60
 
 
 def test_hello_is_validated(client: TestClient) -> None:

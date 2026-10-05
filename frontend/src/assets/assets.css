@@ -1,0 +1,141 @@
+.assets-page {
+  position: relative;
+  min-height: 100%;
+  overflow-y: auto;
+  height: 100%;
+  font-size: 12px;
+}
+
+.assets-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: rgba(17, 24, 39, 0.95);
+  border-bottom: 1px solid var(--line);
+}
+
+.assets-header .legend b {
+  font-weight: 600;
+}
+.assets-header .x {
+  color: #ef4444;
+}
+.assets-header .y {
+  color: #22c55e;
+}
+.assets-header .z {
+  color: #3b82f6;
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 12px 16px 32px;
+}
+
+.asset-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #111827;
+}
+
+.asset-card.error {
+  border-color: #dc2626;
+}
+
+.asset-view {
+  height: 220px;
+  width: 100%;
+}
+
+.assets-canvas {
+  position: fixed !important;
+  inset: 0;
+  pointer-events: none;
+}
+
+.asset-info {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.asset-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.asset-info .file {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asset-info table {
+  border-collapse: collapse;
+}
+
+.asset-info th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding-right: 8px;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.asset-info .warn {
+  color: #fbbf24;
+}
+
+.asset-info .nodes {
+  color: var(--muted);
+  word-break: break-all;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+.badge {
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.badge.loaded,
+.badge.ready {
+  border-color: #16a34a;
+  color: #4ade80;
+}
+
+.badge.error {
+  border-color: #dc2626;
+  color: #f87171;
+}
+
+.badge.placeholder,
+.badge.waiting,
+.badge.loading {
+  border-color: #ca8a04;
+  color: #facc15;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.asset-actions button {
+  padding: 3px 8px;
+  font-size: 12px;
+}

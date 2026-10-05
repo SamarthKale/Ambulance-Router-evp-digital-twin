@@ -1,22 +1,38 @@
 /**
  * Map label as a sprite with a canvas texture: constant size on screen, drawn on top,
  * no extra React root (unlike drei <Html>) and no font download (unlike drei <Text>).
- * Sizing assumes the orthographic top-down camera.
+ * Works with the orthographic top view and the perspective 3D views.
  */
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { CanvasTexture, SRGBColorSpace, type OrthographicCamera, type Sprite } from "three";
+import {
+  CanvasTexture,
+  SRGBColorSpace,
+  Vector3,
+  type OrthographicCamera,
+  type PerspectiveCamera,
+  type Sprite,
+} from "three";
 
 import type { WorldPoint } from "../simulation/coords";
 
 const PX_RATIO = 3; // texture pixels per screen pixel, for crisp text
 const HEIGHT_PX = 18;
+const world = new Vector3();
 
 interface LabelProps {
   text: string;
   position: WorldPoint;
   background: string;
   color?: string;
+}
+
+/** World units per screen pixel at a point, for either camera type. */
+export function unitsPerPixel(camera: OrthographicCamera | PerspectiveCamera, at: Vector3, viewportHeight: number): number {
+  if ((camera as OrthographicCamera).isOrthographicCamera) return 1 / ((camera as OrthographicCamera).zoom || 1);
+  const p = camera as PerspectiveCamera;
+  const distance = p.position.distanceTo(at);
+  return (2 * distance * Math.tan((p.fov * Math.PI) / 360)) / Math.max(1, viewportHeight);
 }
 
 export function Label({ text, position, background, color = "#ffffff" }: LabelProps) {
@@ -27,14 +43,17 @@ export function Label({ text, position, background, color = "#ffffff" }: LabelPr
   );
   useEffect(() => () => texture.dispose(), [texture]);
 
-  useFrame(({ camera }) => {
-    const zoom = (camera as OrthographicCamera).zoom || 1;
-    sprite.current?.scale.set((HEIGHT_PX * aspect) / zoom, HEIGHT_PX / zoom, 1);
+  useFrame(({ camera, size }) => {
+    const s = sprite.current;
+    if (!s) return;
+    s.getWorldPosition(world);
+    const k = unitsPerPixel(camera as OrthographicCamera | PerspectiveCamera, world, size.height);
+    s.scale.set(HEIGHT_PX * aspect * k, HEIGHT_PX * k, 1);
   });
 
   return (
     <sprite ref={sprite} position={position} renderOrder={10}>
-      <spriteMaterial map={texture} transparent depthTest={false} />
+      <spriteMaterial map={texture} transparent depthTest={false} toneMapped={false} />
     </sprite>
   );
 }

@@ -30,6 +30,9 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 COMMAND_TIMEOUT_S = 2.0
+# Reset restarts SUMO and fast-forwards the live warm-up (EF_WARMUP_S, 120 s simulated):
+# ~10 s on the 4x4 grid at 1.5x plugged in, longer on battery.
+RESET_TIMEOUT_S = 120.0
 OBSERVER_REASON = "observer: another screen is driving"
 
 
@@ -128,10 +131,11 @@ def handle_message(
     if isinstance(cmd, DriveCmd):
         return  # fire and forget, no ack
     command = cmd
+    timeout = RESET_TIMEOUT_S if isinstance(cmd, ResetCmd) else COMMAND_TIMEOUT_S
 
     async def ack_when_done() -> None:
         try:
-            result = await asyncio.wait_for(asyncio.wrap_future(future), COMMAND_TIMEOUT_S)
+            result = await asyncio.wait_for(asyncio.wrap_future(future), timeout)
         except TimeoutError:
             result = CommandResult(False, "simulation not responding")
         _ack(channel, command.id, result.ok, result.reason)

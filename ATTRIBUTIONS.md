@@ -56,7 +56,7 @@ Triangle guideline (CLAUDE.md section 11): about 5k per vehicle and 20k per buil
 | Generic buildings (P1) | quaternius_cc0-small-building-746.glb | Quaternius | licensed for project use (team) | 5.2k tris; 5.7 m tall (units) |
 | Generic buildings (P1) | Apartment building by Poly by Google - 01lqee-dZAr.glb | Poly by Google | licensed for project use (team) | same model as Member 1's Residential block; 2.1k tris; 18 m tall |
 | Hatchback (P2) | Car Hatchback by Kay Lousberg - BG0KAhmGDt.glb | Kay Lousberg | licensed for project use (team) | 1.2k tris; 0.81 units long (units); four separate wheel parts |
-| Stop line / zebra crossing (P2) | street-tile-c7e3cf.glb | (no source in file name) | licensed for project use (team) | 188 tris; 8 x 8 m street tile with a separate `street-surface` part; mapped by elimination within Member 2's list |
+| Stop line / zebra crossing (P2) | street-tile-c7e3cf.glb | (no source in file name) | licensed for project use (team) | 188 tris; 8 x 8 m street tile with a separate `street-surface` part; mapping confirmed by the team (2026-10-05). Its vertex colours are plain asphalt (no stripes), so stop lines and zebras are generated in code as the workbook allows; the tile paves the depot apron and the hospital ambulance bay |
 | Crashed or wrecked car (P2) | Crashed wrecked car gltf/Crashed wrecked car.gltf (+ .bin + 2 PNG textures) | (no source in file name) | licensed for project use (team) | multi-file glTF, all referenced files present; 49.8k tris; 24.8 MB (23 MB textures); 1.2 units long (units) |
 | Skybox / HDRI (P2) | kloofendal_48d_partly_cloudy_puresky_4k.exr | (no source in file name) | licensed for project use (team) | valid OpenEXR, 4k; 72 MB: load lazily |
 | Two-wheeler (P3) | Scooter by Poly by Google - eHdEFPwUfCt.glb | Poly by Google | licensed for project use (team) | 1.5k tris; 120 units long (units) |
@@ -76,3 +76,28 @@ Triangle guideline (CLAUDE.md section 11): about 5k per vehicle and 20k per buil
 | Taxi (P3) | taxi.glb | (no source in file name) | licensed for project use (team) | 3.3k tris; 4.2 m, real scale; wheels are separate parts |
 | Explosion / impact marker (P3) | explosion_marker.glb | (no source in file name) | licensed for project use (team) | 240 tris; 3 nested shells |
 | Flyover / bridge (P3) | flyover.glb | (no source in file name) | licensed for project use (team) | 480 tris; 60 m deck |
+
+## Manifest calibration (Sprint 5)
+
+How each delivery is shown, checked on the dev-only asset page (axes, 1 m grid, 5 m ruler) and by `npm run check:assets`. Every correction lives in `frontend/src/assets/manifest.ts`; no file was edited.
+
+| Asset key | File | Correction in the manifest | Use in the scene |
+|---|---|---|---|
+| ambulance | Ambulance by Poly by Google | fit 6.0 m long (SUMO vType); faces +Z as delivered | the driven ambulance; generated red/blue light bar (the model has no `siren` part) |
+| car_sedan / taxi / suv | sedan.glb / taxi.glb / SUV.glb | fit 4.5 m (the `car_sedan` vType); sedan and SUV paint tinted per vehicle | background traffic (50 / 25 / 25 %, picked by vehicle id) |
+| car_hatchback | Car Hatchback by Kay Lousberg | fit 3.9 m (vType) | background traffic |
+| fire_truck | Fire Truck by Ivan Klus | turned +90 deg (modelled along X), fit 8 m | parked at the depot |
+| police_car, truck, auto_rickshaw, scooter | (Members 1-3) | fit 4.6 / 6.5 / 2.8 / 1.8 m | parked: hospital forecourt, petrol station, auto stand and scooters by the shops |
+| bus | Bus by Poly by Google | fit 12 m | on the asset page; SUMO buses are off (junction collisions, Sprint 2) |
+| traffic_light | traffic_light.glb | real scale, pivot kept on the pole; `Red_Light` / `Yellow_Light` / `Green_Light` aliased to the lamp parts | one head per approach at the stop line, lamps lit from the live signal state |
+| pedestrian_signal | pedestrian_traffic_light.glb | fit 3 m tall | one per crossing |
+| hospital | Hospital by Poly by Google | turned -90 deg (the entrance and sign face +X in the file), 64 m frontage | at the hospital stop, entrance to the road, red-cross sign above |
+| building_01..05, residential | Kenney (x2), Quaternius (x2), Poly apartment (x2) | fit to 26 / 16 / 12 / 20 m tall; apartments already in metres | building rows on every block; building_05 is Member 1's extra Kenney building (not in the workbook) |
+| shops | model.glb | already in metres (28.9 x 32 m); 688 meshes merged into 4 draws | the bazaar on the depot road |
+| petrol_station, fuel_pump | Gas Station by Alex Safayan, jerryblessed-fuel | station fit 22 m wide (361 meshes into 1 draw); pumps real scale | across the depot road |
+| bus_stop | standard_bus_stop.glb | real scale; loaded after the scene is interactive | on the road after the depot road |
+| tree, tree_pine | Quaternius | real scale; leaves drawn as cut-outs (runtime material copy) | pavements and parks; a cone stand-in when small on screen |
+| streetlight, divider, sign_stop, sign_no_parking, hydrant, trashcan, bench, grass_patch, path_tile, street_tile | (Members 1, 2) | fits as listed in the manifest; signs turned -90 deg (their face points -X in the file), divider +90 deg | street furniture; path tiles pave the hospital walkway, street tiles the depot apron and ambulance bay |
+| wrecked_car, cone, barricade, road_block, explosion_marker | (Members 2-4) | fits as listed | incident props for Sprint 8; on the asset page now (the crashed car loads on demand) |
+| flyover | flyover.glb | real scale | on the asset page; the grid networks have no flyover |
+| (skybox) | kloofendal_48d_partly_cloudy_puresky_4k.exr | decoded in a Web Worker, shown at 2048x1024 | sky and image-based light, ~10 s after the page opens |
