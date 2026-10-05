@@ -45,3 +45,34 @@ Triangle guideline (CLAUDE.md section 11): about 5k per vehicle and 20k per buil
 | Pedestrian signal (P3) | pedestrian_traffic_light.glb | Sketchfab (no author in file name) | licensed for project use (team) | 1.5k tris; 402 units tall (cm) |
 | Bus stop (P3) | standard_bus_stop.glb | Sketchfab (no author in file name) | licensed for project use (team) | 11.6k tris; correct size; 23.7 MB (22.6 MB of textures): load lazily, never re-encode |
 | Shops / commercial row (P3) | model.glb | 3dassets.dev ("bazaar-street-and-shrine-at-trading-hours") | licensed for project use (team) | 92k tris and 859 nodes (above the building guideline; used as-is); 181 km (units); mapping confirmed by the team |
+
+## Member 2 (`3d_models/member-2/`)
+
+| Workbook asset (priority) | File | Source / author (from file name) | Licence | Validation |
+|---|---|---|---|---|
+| Sedan (P1) | sedan.glb | (no source in file name) | licensed for project use (team) | 3.1k tris; 3.9 m, real scale; body and wheels are separate parts |
+| Generic buildings, 3-5 variants (P1) | Large Building by Kenney - h7Jaq7bqMq.glb | Kenney | licensed for project use (team) | 2.1k tris; 2.5 m tall (units) |
+| Generic buildings (P1) | quaternius_cc0-building-747.glb | Quaternius | licensed for project use (team) | 9.7k tris; 5.5 m tall (units) |
+| Generic buildings (P1) | quaternius_cc0-small-building-746.glb | Quaternius | licensed for project use (team) | 5.2k tris; 5.7 m tall (units) |
+| Generic buildings (P1) | Apartment building by Poly by Google - 01lqee-dZAr.glb | Poly by Google | licensed for project use (team) | same model as Member 1's Residential block; 2.1k tris; 18 m tall |
+| Hatchback (P2) | Car Hatchback by Kay Lousberg - BG0KAhmGDt.glb | Kay Lousberg | licensed for project use (team) | 1.2k tris; 0.81 units long (units); four separate wheel parts |
+| Stop line / zebra crossing (P2) | street-tile-c7e3cf.glb | (no source in file name) | licensed for project use (team) | 188 tris; 8 x 8 m street tile with a separate `street-surface` part; mapped by elimination within Member 2's list |
+| Crashed or wrecked car (P2) | Crashed wrecked car gltf/Crashed wrecked car.gltf (+ .bin + 2 PNG textures) | (no source in file name) | licensed for project use (team) | multi-file glTF, all referenced files present; 49.8k tris; 24.8 MB (23 MB textures); 1.2 units long (units) |
+| Skybox / HDRI (P2) | kloofendal_48d_partly_cloudy_puresky_4k.exr | (no source in file name) | licensed for project use (team) | valid OpenEXR, 4k; 72 MB: load lazily |
+| Two-wheeler (P3) | Scooter by Poly by Google - eHdEFPwUfCt.glb | Poly by Google | licensed for project use (team) | 1.5k tris; 120 units long (units) |
+| Divider / median (P3) | divider.glb | (no source in file name) | licensed for project use (team) | 232 tris; 1.9 m barrier segment |
+| Petrol pump (P3) | Gas Station by Alex Safayan - 7rUkCX-AIR2.glb | Alex Safayan | licensed for project use (team) | 53.9k tris and 263 nodes (above the building guideline; used as-is); 8.7 m |
+| Petrol pump (P3) | jerryblessed-fuel-5054.glb | jerryblessed | licensed for project use (team) | 324 tris; 1.76 m pump; separate named parts |
+
+## Member 3 (`3d_models/member-3/`)
+
+| Workbook asset (priority) | File | Source / author (from file name) | Licence | Validation |
+|---|---|---|---|---|
+| Traffic light, pole + 3 lamps (P1) | traffic_light.glb | (no source in file name) | licensed for project use (team) | 1.7k tris; 4.05 m tall, real scale; lamps are separate parts **`Red_Light`, `Yellow_Light`, `Green_Light`** (mapped to `lamp_red`/`lamp_yellow`/`lamp_green` by manifest aliases) |
+| SUV / van (P2) | SUV.glb | (no source in file name) | licensed for project use (team) | 3.3k tris; 4.2 m, real scale; wheels are separate parts |
+| Traffic cones (P2) | traffic_cone.glb | (no source in file name) | licensed for project use (team) | 140 tris; 1.26 m (units) |
+| Road-block marker (P2) | road_block_marker.glb | (no source in file name) | licensed for project use (team) | 112 tris; 1.6 m barricade |
+| Police car (P3) | police_car.glb | (no source in file name) | licensed for project use (team) | 9.9k tris (above the vehicle guideline); 0.22 units long (units); 4.8 MB; includes a `sceneGroundPlane` node |
+| Taxi (P3) | taxi.glb | (no source in file name) | licensed for project use (team) | 3.3k tris; 4.2 m, real scale; wheels are separate parts |
+| Explosion / impact marker (P3) | explosion_marker.glb | (no source in file name) | licensed for project use (team) | 240 tris; 3 nested shells |
+| Flyover / bridge (P3) | flyover.glb | (no source in file name) | licensed for project use (team) | 480 tris; 60 m deck |

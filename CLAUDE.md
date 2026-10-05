@@ -83,7 +83,8 @@ sparkathon26/                      (EmergencyFlow AI)
 ├── 3d_models/                     # team deliveries as received (Git LFS) + the asset workbook
 │   ├── EmergencyFlow_3D_Asset_Checklist_Assigned.xlsx   # ownership + priority: source of truth
 │   ├── Memeber-1/                 # Member 1's files (folder name as created by the team)
-│   └── member-4/                  # Member 4's files (Members 2 and 3: later)
+│   ├── member-2/  member-3/       # Members 2 and 3 (final asset set: all four members delivered)
+│   └── member-4/                  # Member 4's files
 ├── frontend/
 │   ├── src/
 │   │   ├── components/            # TopDownScene, geometry (road ribbons), Label, vehicleStyles;
@@ -323,7 +324,12 @@ Replies:
 
 **Team deliveries (`3d_models/`).**
 - The workbook `3d_models/EmergencyFlow_3D_Asset_Checklist_Assigned.xlsx` is the **source of truth** for ownership and priority. Never reassign assets.
-- Each member delivers into their own folder. Members 2 and 3 deliver later, and that must never block anything: missing assets use placeholders and the app runs without them.
+- Each member delivers into their own folder. All four members have delivered (2026-10-05), and the files in `3d_models/` are the **final asset set**: no more uploads are coming, and every workbook asset has a file. Placeholders remain only as the fallback when a file fails to load, and the app must still run without any model.
+- Non-GLB deliveries are used as delivered:
+  - the crashed car is a multi-file `.gltf` with its `.bin` and PNG textures
+  - the skybox is a 72 MB `.exr`
+
+  `.gitattributes` routes them through Git LFS byte-exact.
 - When new files arrive:
   1. Commit them under `3d_models/` (Git LFS).
   2. Map each file to its workbook asset and asset key.
