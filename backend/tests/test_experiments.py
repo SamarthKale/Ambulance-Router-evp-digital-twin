@@ -11,9 +11,14 @@ import pytest
 
 from evaluation.arms import ALL_ARMS, BASELINE, Arm, parse_arms
 from evaluation.missions import DISPATCH_SPREAD_S, WARMUP_MIN_S, draw_mission, map_edge_roads
+from evaluation.programs import PROGRAM_ID, tuned_program
 from evaluation.report import save_manifest, save_runs, write_report
 from evaluation.runner import RED_TYPE, RunSpec, run_one, write_red_vtype
+from simulation.engine import SimulationEngine
 from simulation.network import RoadNetwork
+from simulation.sumo import SumoConfig
+from simulation.traffic_lights import load_signal_tables
+from tests.helpers import run
 
 
 def test_arms_cover_signals_times_routing() -> None:
@@ -60,6 +65,7 @@ def test_arms_of_a_seed_start_from_the_same_traffic_and_report(tmp_path: Path) -
     assert len({r["dispatch_hash"] for r in rows}) == 1  # paired: identical start
     assert len({r["dispatch_vehicles"] for r in rows}) == 1
     for row in rows:
+        assert row["signal_program"] == "net" and row["cycle_s"] == 74.0
         assert row["arrived"] and row["valid"] and row["travel_s"] > 0
         assert row["violations"] == 0 and row["collisions"] == 0 and row["teleports"] == 0
         assert row["bg_vehicles"] > 0 and row["bg_time_loss_s"] > 0
@@ -89,3 +95,29 @@ def test_arms_of_a_seed_start_from_the_same_traffic_and_report(tmp_path: Path) -
     assert (out / "summary" / "travel_time_grid2x2_x1.png").stat().st_size > 10_000
     assert json.loads((out / "summary" / "summary.json").read_text())["baseline"] == BASELINE.id
     assert (out / "basic_dynamic" / "manifests" / "grid2x2_x1_seed002.json").exists()
+
+
+def test_tuned_program_keeps_phases_and_clearances_and_passes_the_monitor(
+    tmp_path: Path,
+) -> None:
+    path = tuned_program("grid2x2", 1.0, tmp_path)
+    mtime = path.stat().st_mtime_ns
+    assert tuned_program("grid2x2", 1.0, tmp_path) == path  # generated once, then reused
+    assert path.stat().st_mtime_ns == mtime
+    config = SumoConfig(log_path=tmp_path / "sumo.log", signal_programs=path)
+    net = load_signal_tables(config.net_path)
+    tuned = load_signal_tables(config.net_path, path)
+    for tls, table in tuned.items():
+        assert table.program_id == PROGRAM_ID
+        assert [s for s, _ in table.phases] == [s for s, _ in net[tls].phases]  # same states
+        durations = [d for _, d in table.phases]
+        assert durations[1::3] == [4.0, 4.0] and durations[2::3] == [2.0, 2.0]  # yellow, red
+        assert sum(durations) < sum(d for _, d in net[tls].phases)  # Webster: shorter here
+    engine = SimulationEngine(config, realtime=False, deadman_s=None)
+    engine.open()
+    try:
+        state = run(engine, 3 * max(sum(d for _, d in t.phases) for t in tuned.values()))
+        assert {s.program for s in state.snapshot.signals} == {PROGRAM_ID}
+        assert state.safety.violations == 0 and state.safety.collisions == 0
+    finally:
+        engine.close()

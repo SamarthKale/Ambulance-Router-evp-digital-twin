@@ -93,6 +93,11 @@ class SumoConfig:
     # Route file in the scenario folder that replaces the sumocfg's. None = the sumocfg's
     # 1-hour experiment demand; the live server uses "routes.live.rou.xml" (24 h flows).
     routes: str | None = None
+    additional_files: tuple[Path, ...] = ()  # e.g. extra vTypes (batch experiments)
+    # Normal signal programs replacing the net's (an additional file of tlLogic elements,
+    # e.g. tuned for the demand by tlsCycleAdaptation.py). SUMO activates the loaded program;
+    # load_signal_tables(net_path, signal_programs) gives the controller the same one.
+    signal_programs: Path | None = None
     extra_args: tuple[str, ...] = ()
 
     @property
@@ -116,6 +121,11 @@ class SumoConfig:
         # fmt: on
         if self.routes is not None:
             cmd += ["--route-files", str(SCENARIOS_DIR / self.scenario / self.routes)]
+        additional = [*self.additional_files]
+        if self.signal_programs is not None:
+            additional.append(self.signal_programs)
+        if additional:
+            cmd += ["--additional-files", ",".join(str(p) for p in additional)]
         if self.gui:
             cmd += ["--start", "--quit-on-end"]
         return cmd + list(self.extra_args)

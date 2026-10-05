@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.arms import BASELINE, parse_arms
+from evaluation.programs import tuned_program
 from evaluation.report import (
     done_keys,
     load_runs,
@@ -111,6 +112,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ci-target", type=float, default=None, help="s, CI half-width goal")
     parser.add_argument("--max-seeds", type=int, default=40)
     parser.add_argument("--batch", type=int, default=5, help="seeds added per CI round")
+    parser.add_argument(
+        "--program",
+        choices=("tuned", "net"),
+        default="tuned",
+        help="base signal program of every arm: tuned for the demand (default) or the net's",
+    )
     parser.add_argument("--report-only", action="store_true")
     args = parser.parse_args(argv)
 
@@ -120,10 +127,14 @@ def main(argv: list[str] | None = None) -> int:
         scales = [float(s) for s in args.scales.split(",")]
         seeds = parse_seeds(args.seeds)
         raw = out / "raw" if args.keep_raw else None
+        programs = {
+            scale: tuned_program(args.scenario, scale, out) if args.program == "tuned" else None
+            for scale in scales
+        }
         while True:
             done = set() if args.rerun else done_keys(out)
             specs = [
-                RunSpec(args.scenario, scale, seed, arm, args.window)
+                RunSpec(args.scenario, scale, seed, arm, args.window, programs[scale])
                 for scale in scales
                 for seed in seeds
                 for arm in arms

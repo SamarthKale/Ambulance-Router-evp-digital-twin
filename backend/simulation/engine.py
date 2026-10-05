@@ -213,7 +213,7 @@ class SimulationEngine:
             self.network = self.network.with_mission(mission)
         self.graph = self.network.road_graph()
         self._successors = self.graph.successors()
-        self.tables = load_signal_tables(config.net_path)
+        self.tables = load_signal_tables(config.net_path, config.signal_programs)
         self._programs = {tls: table.phases for tls, table in self.tables.items()}
         self._route: RoutePlan | None = None
         self._route_start = ""

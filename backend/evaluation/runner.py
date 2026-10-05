@@ -43,6 +43,8 @@ class RunSpec:
     seed: int
     arm: Arm
     window_s: float = WINDOW_S
+    # The base signal program every arm shares (evaluation/programs.py); None = the net's own.
+    signal_programs: Path | None = None
 
     @property
     def key(self) -> str:
@@ -90,18 +92,17 @@ def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
     mission = mission_for(spec.scenario, spec.seed)
     work_dir.mkdir(parents=True, exist_ok=True)
     tripinfo, log = work_dir / "tripinfo.xml", work_dir / "sumo.log"
-    extra = ["--tripinfo-output", str(tripinfo), "--tripinfo-output.write-unfinished", "true"]
-    if spec.arm.crosses_red:
-        extra += [
-            "--additional-files",
-            str(write_red_vtype(spec.scenario, work_dir / "red.add.xml")),
-        ]
+    red = work_dir / "red.add.xml"
     config = SumoConfig(
         scenario=spec.scenario,
         seed=spec.seed,
         scale=spec.scale,
         log_path=log,
-        extra_args=tuple(extra),
+        additional_files=(write_red_vtype(spec.scenario, red),) if spec.arm.crosses_red else (),
+        signal_programs=spec.signal_programs,
+        extra_args=(
+            "--tripinfo-output", str(tripinfo), "--tripinfo-output.write-unfinished", "true"
+        ),  # fmt: skip
     )
     engine = SimulationEngine(
         config,
@@ -138,6 +139,8 @@ def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
         "dispatch_s": mission.dispatch_s,
         "trip_m": mission.distance_m,
         "window_s": spec.window_s,
+        "signal_program": "tuned" if spec.signal_programs else "net",
+        "cycle_s": round(_mean_cycle(engine), 1),
         **metrics.result(),
         **parse_tripinfo(tripinfo),
         **parse_log(log, since=mission.dispatch_s),
@@ -145,6 +148,11 @@ def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
     row["valid"] = bool(row["arrived"]) and row["teleports"] == 0
     row["wall_s"] = round(time.perf_counter() - started, 1)
     return {"row": row, "manifest": manifest(spec, mission, config)}
+
+
+def _mean_cycle(engine: SimulationEngine) -> float:
+    cycles = [sum(d for _, d in table.phases) for table in engine.tables.values()]
+    return sum(cycles) / len(cycles)
 
 
 # ---- run manifest ------------------------------------------------------------------------
@@ -181,6 +189,8 @@ def config_hash(spec: RunSpec, config: SumoConfig) -> str:
     folder = SCENARIOS_DIR / spec.scenario
     for name in ("simulation.sumocfg", "network.net.xml", "routes.rou.xml", "scenario.json"):
         digest.update((folder / name).read_bytes())
+    if spec.signal_programs is not None:
+        digest.update(spec.signal_programs.read_bytes())
     options = [o for o in config.command(Path("sumo"), 0) if "\\" not in o and "/" not in o]
     params = {"options": options, "arm": spec.arm.id, "window_s": spec.window_s}
     digest.update(json.dumps(params, sort_keys=True).encode())
@@ -196,6 +206,7 @@ def manifest(spec: RunSpec, mission: MissionSpec, config: SumoConfig) -> dict[st
         "scale": spec.scale,
         "seed": spec.seed,
         "window_s": spec.window_s,
+        "signal_program": spec.signal_programs.name if spec.signal_programs else "network.net.xml",
         "mission": asdict(mission),
         "control": "autopilot",
         "sumo_version": sumo_version(),
