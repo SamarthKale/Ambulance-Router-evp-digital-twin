@@ -92,6 +92,8 @@ def widest_ci(out: Path, scenario: str, scales: list[float]) -> float:
     runs = load_runs(out)
     runs = runs[(runs["scenario"] == scenario) & (runs["scale"].isin(scales))]
     table = paired_table(runs)
+    if table.empty:
+        return float("inf")
     rows = table[(table["metric"] == "travel_s") & (table["reference"] == BASELINE.id)]
     if rows.empty:
         return float("inf")
@@ -142,8 +144,11 @@ def main(argv: list[str] | None = None) -> int:
             ]
             print(f"{len(specs)} runs to do ({len(arms)} arms x {len(seeds)} seeds x "
                   f"{len(scales)} scales, {args.workers} workers)", flush=True)  # fmt: skip
-            if specs and run_batch(specs, args.workers, out, raw):
-                print("some runs failed; see above", file=sys.stderr)
+            failures = run_batch(specs, args.workers, out, raw) if specs else 0
+            if failures:
+                print(f"{failures} runs failed; see above", file=sys.stderr)
+            if specs and failures == len(specs):
+                return 1  # nothing worked: adding seeds won't help
             if args.ci_target is None:
                 break
             width = widest_ci(out, args.scenario, scales)

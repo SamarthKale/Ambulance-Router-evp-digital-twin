@@ -100,9 +100,12 @@ def test_arms_of_a_seed_start_from_the_same_traffic_and_report(tmp_path: Path) -
 def test_tuned_program_keeps_phases_and_clearances_and_passes_the_monitor(
     tmp_path: Path,
 ) -> None:
-    path = tuned_program("grid2x2", 1.0, tmp_path)
+    out = tmp_path / "c--sparkathon26"  # '--' in a path once broke the tool's XML header
+    path = tuned_program("grid2x2", 1.0, out)
     mtime = path.stat().st_mtime_ns
-    assert tuned_program("grid2x2", 1.0, tmp_path) == path  # generated once, then reused
+    assert tuned_program("grid2x2", 1.0, out) == path  # generated once, then reused
+    ET.parse(path)  # well-formed XML
+    assert "sparkathon26" not in path.read_text(encoding="utf-8")  # no local paths
     assert path.stat().st_mtime_ns == mtime
     config = SumoConfig(log_path=tmp_path / "sumo.log", signal_programs=path)
     net = load_signal_tables(config.net_path)
