@@ -519,7 +519,8 @@ export const results = {
         }
       ]
     }
-  ]
+  ],
+  "charts": []
 } satisfies ResultsMsg;
 
 export const noResults = {
@@ -527,7 +528,8 @@ export const noResults = {
   "generatedAt": null,
   "note": "no experiment results yet",
   "baseline": "",
-  "experiments": []
+  "experiments": [],
+  "charts": []
 } satisfies ResultsMsg;
 
 export const commands = [

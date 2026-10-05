@@ -9,6 +9,9 @@ import { useSim, type CommandBody } from "../simulation/state";
 import { useManualDrive } from "../simulation/useManualDrive";
 import { SimSocket, fetchNetwork, socketUrl, tabClientId } from "../simulation/websocket";
 
+// The read-only dashboard (/dashboard) for a second screen or another PC: no 3D, own chunk.
+const DashboardPage = lazy(() => import("../dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+
 // Dev-only asset inspection page (CLAUDE.md section 11); not part of the production bundle.
 const AssetsPage = import.meta.env.DEV ? lazy(() => import("../assets/AssetsPage")) : null;
 
@@ -17,6 +20,13 @@ export function App() {
     return (
       <Suspense fallback={null}>
         <AssetsPage />
+      </Suspense>
+    );
+  }
+  if (window.location.pathname.startsWith("/dashboard")) {
+    return (
+      <Suspense fallback={null}>
+        <DashboardPage />
       </Suspense>
     );
   }

@@ -59,6 +59,12 @@ def test_the_report_summary_is_served_in_camel_case(client: TestClient, tmp_path
 
     body = client.get("/api/results").json()
     assert body["available"] is True and body["baseline"] == BASELINE.id
+    assert "travel_time_grid4x4_x1.5.png" in body["charts"]
+    png = client.get("/api/charts/travel_time_grid4x4_x1.5.png")
+    assert png.status_code == 200 and png.headers["content-type"] == "image/png"
+    assert png.content[1:4] == b"PNG"  # the PNG signature
+    assert client.get("/api/charts/..%2Fsummary.json").status_code == 404  # names only
+    assert client.get("/api/charts/summary.json").status_code == 404
     (experiment,) = body["experiments"]
     assert experiment["pairingOk"] and experiment["signalProgram"] == "tuned"
     assert experiment["cycleS"] == 35.0 and experiment["seeds"] == [1, 2, 3, 4, 5]

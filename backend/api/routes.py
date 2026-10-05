@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from api.protocol import HealthMsg, NetworkMsg, ResultsMsg
@@ -15,6 +17,7 @@ from simulation.sumo import REPO_ROOT
 
 log = logging.getLogger(__name__)
 RESULTS = REPO_ROOT / "experiments" / "summary" / "summary.json"
+CHART_NAME = re.compile(r"^[\w.-]+\.png$")
 
 router = APIRouter(prefix="/api")
 
@@ -32,12 +35,23 @@ def results(request: Request) -> ResultsMsg:
     path: Path = getattr(request.app.state, "results_path", RESULTS)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return ResultsMsg.model_validate({"available": True, **data})
+        charts = sorted(p.name for p in path.parent.glob("*.png"))
+        return ResultsMsg.model_validate({"available": True, **data, "charts": charts})
     except FileNotFoundError:
         return ResultsMsg(available=False, note="no experiment results yet")
     except (OSError, ValueError, ValidationError) as exc:
         log.warning("unreadable experiment summary %s: %s", path, exc)
         return ResultsMsg(available=False, note=f"unreadable experiment summary: {exc}")
+
+
+@router.get("/charts/{name}")
+def chart(name: str, request: Request) -> FileResponse:
+    """A chart from experiments/summary/ (plain .png names only: no paths)."""
+    folder: Path = getattr(request.app.state, "results_path", RESULTS).parent
+    path = folder / name
+    if not CHART_NAME.match(name) or not path.is_file():
+        raise HTTPException(status_code=404, detail="no such chart")
+    return FileResponse(path, media_type="image/png")
 
 
 @router.get("/health")

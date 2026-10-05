@@ -248,6 +248,7 @@ export interface ResultsMsg {
   note: string;
   baseline: string;
   experiments: ResultExperimentMsg[];
+  charts: string[]; // PNG charts, served at /api/charts/<name>
 }
 
 // ---- GET /api/network ------------------------------------------------------------

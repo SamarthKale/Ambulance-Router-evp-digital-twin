@@ -19,6 +19,9 @@
   .\start.ps1 -Scenario grid2x2 -Scale 1.0   # the small grid, normal traffic
 .EXAMPLE
   .\start.ps1 -Prod                          # production build, served by vite preview (port 4173)
+.EXAMPLE
+  .\start.ps1 -Lan                           # also reachable from other PCs on the network:
+                                             # http://<this PC's IP>:5173/dashboard
 #>
 param(
     [ValidateSet("grid2x2", "grid4x4")][string]$Scenario = "grid4x4",
@@ -29,6 +32,7 @@ param(
     [switch]$Prod,                # production build + vite preview instead of the dev server
     [switch]$Setup,               # create the venv and install packages first
     [switch]$NoBrowser,
+    [switch]$Lan,                 # listen on the network too (dashboard / observers on other PCs)
     [int]$BackendPort = 8000,
     [int]$FrontendPort = 0        # 0: 5173 (dev) or 4173 (-Prod)
 )
@@ -163,6 +167,8 @@ try {
         } else {
             $npmArgs = @("run", "dev", "--", "--port", "$FrontendPort", "--strictPort")
         }
+        # The backend stays on 127.0.0.1: Vite proxies /api and /ws to it.
+        if ($Lan) { $npmArgs += @("--host") }  # all addresses, IPv4 and IPv6
         Say "starting the frontend on http://localhost:$FrontendPort ..." "Cyan"
         $frontendProcess = Start-Process -FilePath "npm.cmd" -ArgumentList $npmArgs -NoNewWindow -PassThru `
             -RedirectStandardOutput (Join-Path $logs "frontend.log") -RedirectStandardError (Join-Path $logs "frontend.err.log")
@@ -171,7 +177,21 @@ try {
     }
     $url = "http://localhost:$FrontendPort/"
     if (-not (Wait-Url $url 90 $frontendProcess "the frontend")) { Fail "the frontend stopped (see logs\frontend.err.log)" }
-    Say "ready: $url" "Green"
+    Say "ready: $url  (dashboard: ${url}dashboard)" "Green"
+    if ($Lan) {
+        $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown" }
+        foreach ($a in $addresses) {
+            Say ("from other PCs ({0}): http://{1}:{2}/dashboard  (live 3D view: http://{1}:{2}/)" -f $a.InterfaceAlias, $a.IPAddress, $FrontendPort) "Green"
+        }
+        $public = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq "Public" }
+        if ($public) {
+            Say "note: the network '$($public[0].Name)' is Public, where Windows blocks incoming connections. Make it Private, or allow the port (admin PowerShell):" "Yellow"
+            Say "  New-NetFirewallRule -DisplayName 'EmergencyFlow $FrontendPort' -Direction Inbound -Protocol TCP -LocalPort $FrontendPort -Action Allow" "Yellow"
+        } else {
+            Say "if another PC can't connect, allow Node.js when Windows asks, or allow TCP $FrontendPort in Windows Firewall" "Gray"
+        }
+    }
     if (-not $NoBrowser) { Start-Process $url }
     Say "Demo: Reset, then Dispatch (the OFF ghost replays the first mission after a reset). R shows the experiment results." "Gray"
     Say "Press Ctrl+C to stop both servers." "Gray"

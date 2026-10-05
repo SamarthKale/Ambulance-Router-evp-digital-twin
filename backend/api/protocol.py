@@ -565,6 +565,7 @@ class ResultsMsg(Message):
     note: str = ""
     baseline: str = ""
     experiments: list[ResultExperimentMsg] = []
+    charts: list[str] = []  # PNG charts, served at /api/charts/<name>
 
 
 class HealthMsg(Message):

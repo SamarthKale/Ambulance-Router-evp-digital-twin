@@ -70,7 +70,7 @@ export function Results({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ExperimentChart({
+export function ExperimentChart({
   experiment,
   baseline,
 }: {
