@@ -5,6 +5,7 @@ import {
   type Command,
   type CommandBody,
   type NetworkMsg,
+  type ResultsMsg,
   type ServerMsg,
 } from "./state";
 
@@ -21,6 +22,12 @@ export async function fetchNetwork(): Promise<NetworkMsg> {
   const response = await fetch("/api/network");
   if (!response.ok) throw new Error(`GET /api/network failed: ${response.status}`);
   return (await response.json()) as NetworkMsg;
+}
+
+export async function fetchResults(): Promise<ResultsMsg> {
+  const response = await fetch("/api/results");
+  if (!response.ok) throw new Error(`GET /api/results failed: ${response.status}`);
+  return (await response.json()) as ResultsMsg;
 }
 
 /**

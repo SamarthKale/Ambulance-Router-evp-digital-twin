@@ -9,14 +9,17 @@ import { describe, expect, it } from "vitest";
 import * as fixtures from "./contract.fixtures";
 import type {
   Command,
+  GhostPhase,
   HealthMsg,
   IncidentType,
   MissionStatus,
+  ResultSignals,
   Routing,
   ServerMsg,
   SessionRole,
   SignalControl,
   SignalMode,
+  SignalProgram,
   TurnKind,
 } from "./state";
 import { parseServerMsg } from "./websocket";
@@ -37,7 +40,10 @@ const enumsMatch: [
   Equal<HealthMsg["status"], Values<"healthStatus">>,
   Equal<Routing, Values<"routing">>,
   Equal<IncidentType, Values<"incidentType">>,
-] = [true, true, true, true, true, true, true, true];
+  Equal<GhostPhase, Values<"ghostPhase">>,
+  Equal<ResultSignals, Values<"resultSignals">>,
+  Equal<SignalProgram, Values<"signalProgram">>,
+] = [true, true, true, true, true, true, true, true, true, true, true];
 
 describe("protocol contract", () => {
   it("knows every backend command, server message type and enum value", () => {

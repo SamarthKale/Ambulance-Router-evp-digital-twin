@@ -86,7 +86,7 @@ def test_arms_of_a_seed_start_from_the_same_traffic_and_report(tmp_path: Path) -
     (experiment,) = data["experiments"]
     assert experiment["pairing_ok"] and experiment["seeds"] == [2]
     by_arm = {a["arm"]: a for a in experiment["arms"]}
-    vs = by_arm["basic_dynamic"]["travel_s_vs_baseline"]
+    vs = by_arm["basic_dynamic"]["travel_vs_baseline"]
     assert vs["n"] == 1 and vs["mean_diff"] == pytest.approx(
         basic["travel_s"] - rows[0]["travel_s"], abs=0.01
     )

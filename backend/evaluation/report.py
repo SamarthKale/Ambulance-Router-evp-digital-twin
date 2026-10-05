@@ -186,24 +186,32 @@ def summary(runs: pd.DataFrame, table: pd.DataFrame) -> dict[str, Any]:
                 & (table["arm"] == arm)
                 & (table["reference"] == BASELINE.id)
             ]
+            signals, routing = arm.rsplit("_", 1)
             entry: dict[str, Any] = {
                 "arm": arm,
                 "label": label(arm),
+                "signals": signals,
+                "routing": routing,
                 "runs": int(len(rows)),
                 "valid": int(len(valid)),
                 "travel_mean": _num(_mean(travel)),
                 "travel_ci": [_num(low), _num(high)],
-                "safety": {k: int(rows[k].sum()) for k in SAFETY if k in rows},
+                "wait_mean": _num(_mean([float(w) for w in valid["wait_s"]])),
+                "safety": {k: int(rows[k].sum()) for k in SAFETY},
             }
-            for metric in ("travel_s", "bg_time_loss_s"):
+            for metric, key in (
+                ("travel_s", "travel_vs_baseline"),
+                ("bg_time_loss_s", "bg_delay_vs_baseline"),
+            ):
                 hit = vs[vs["metric"] == metric]
+                entry[key] = None
                 if not hit.empty:
                     r = hit.iloc[0]
-                    entry[f"{metric}_vs_baseline"] = {
+                    entry[key] = {
                         "n": int(r["n"]),
                         "mean_diff": _num(r["mean_diff"]),
                         "ci": [_num(r["ci_low"]), _num(r["ci_high"])],
-                        "p": _num(r["p_wilcoxon"]),
+                        "p": _sig(r["p_wilcoxon"]),
                     }
             arms.append(entry)
         out["experiments"].append(
@@ -212,10 +220,18 @@ def summary(runs: pd.DataFrame, table: pd.DataFrame) -> dict[str, Any]:
                 "scale": float(scale),
                 "seeds": sorted(int(s) for s in set(group["seed"])),
                 "pairing_ok": _check_pairing(group),
+                "signal_program": str(group["signal_program"].iloc[0]),
+                "cycle_s": _num(group["cycle_s"].mean(), 1),
                 "arms": arms,
             }
         )
     return out
+
+
+def _sig(value: Any) -> float | None:
+    """p-values keep 3 significant digits (0.000123 must not round to 0)."""
+    number = _num(value, 12)
+    return None if number is None else float(f"{number:.3g}")
 
 
 def _num(value: Any, digits: int = 2) -> float | None:

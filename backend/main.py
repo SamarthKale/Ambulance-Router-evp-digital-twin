@@ -31,8 +31,13 @@ def engine_from_env() -> SimulationEngine:
         scale=float(os.environ.get("EF_SCALE", "1.0")),
         routes=LIVE_ROUTES,  # 24 h of background traffic; experiments keep the 1 h file
     )
-    # Fast-forward on (re)start so the demo opens with traffic already flowing.
-    return SimulationEngine(config, warmup_s=float(os.environ.get("EF_WARMUP_S", "120")))
+    # Fast-forward on (re)start so the demo opens with traffic already flowing. The OFF ghost
+    # (a shadow simulation in its own process) replays the first mission after each reset.
+    return SimulationEngine(
+        config,
+        warmup_s=float(os.environ.get("EF_WARMUP_S", "120")),
+        ghost=os.environ.get("EF_GHOST", "1") != "0",
+    )
 
 
 def create_app(

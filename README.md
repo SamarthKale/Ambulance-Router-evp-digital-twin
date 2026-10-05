@@ -19,7 +19,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 6 | Live-cost shortest-path routing: route overlay, ETA and distance, advisory turn hints, seeded ETA check | done |
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation | done |
 | 8 | Accident injection + automatic reroute + "route compromised" | done |
-| 9 | Experiment runner (paired seeds, arms, demand sweep), charts, ghost comparison run | next |
+| 9 | Experiment runner (paired seeds, arms, demand sweep), charts, OFF ghost comparison run | done |
+| 10 | Demo hardening, one-command local launcher, final verification (local Windows; no Docker, no CI/CD) | next |
 
 ## Prerequisites (Windows)
 
@@ -77,6 +78,14 @@ The route is planned with live costs:
 It is re-planned every second and every time the ambulance reaches a new road. It is advice only: you steer.
 - **Off the suggestion:** if your next turn differs, the route turns orange and the HUD says which key to press (A or D).
 - **Accuracy:** over 10 seeded autopilot runs on the 4x4 grid, the ETA at dispatch was within 10 % on average with BASIC. With normal signals (OFF) it was within 25 %, because every red light met is a lottery. Run `scripts.eta_check` (below) to reproduce this.
+
+### The OFF ghost
+
+After **Reset**, the first **Dispatch** also starts an **OFF ghost**: the same mission, in the same traffic, with normal signals and the autopilot driving. It is drawn as a translucent ambulance labelled "OFF ghost".
+- **How it works:** a second simulation has been replaying the live one, in lockstep, since the reset (same seed, same traffic). At the dispatch it sends out its own ambulance at the same moment, and it gets the same accidents at the same moments.
+- **Time saved:** when your ambulance arrives, the ghost finishes its run in the background, and the HUD shows **saved N s**. The number is measured on the same traffic, never estimated.
+- **Later dispatches:** they get no ghost (the HUD says why). Your earlier missions changed the traffic in ways the ghost can't replay; press **Reset** for a new one.
+- **Turning it off:** set `EF_GHOST=0` in `.env`. The ghost costs a second SUMO process.
 
 ### Accidents
 

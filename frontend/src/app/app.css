@@ -262,6 +262,80 @@ button.primary:hover:not(:disabled) {
   color: #fbbf24;
 }
 
+.results-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(640px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.96);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  z-index: 20;
+}
+
+.results-panel header {
+  justify-content: space-between;
+}
+
+.results-chart text {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+.results-chart .axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.results-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table th,
+.results-table td {
+  text-align: left;
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid #1f2937;
+}
+
+.results-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.this-drive {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(22, 101, 52, 0.4);
+}
+
+.ghost-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.ghost-line .saved {
+  color: #4ade80;
+}
+
+.ghost-line .lost {
+  color: #fca5a5;
+}
+
 .tag.warn {
   border-color: #ef4444;
   color: #fca5a5;

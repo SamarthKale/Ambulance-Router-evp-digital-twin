@@ -8,6 +8,7 @@ import type {
   ErrorMsg,
   HealthMsg,
   NetworkMsg,
+  ResultsMsg,
   SessionMsg,
   StateMsg,
 } from "./state";
@@ -110,7 +111,7 @@ export const stateDriving = {
     "eta": 31.4,
     "signalsPreempted": 2,
     "queueCleared": 1,
-    "timeSaved": null
+    "timeSaved": 12.3
   },
   "safety": {
     "violations": 0,
@@ -145,7 +146,20 @@ export const stateDriving = {
       "angle": 90.0,
       "since": 120.0
     }
-  ]
+  ],
+  "ghost": {
+    "phase": "arrived",
+    "pose": {
+      "t": 123.3,
+      "x": 598.1,
+      "y": 454.8,
+      "angle": 90.0,
+      "speed": 0.0,
+      "edge": "B1_e1"
+    },
+    "missionTime": 53.8,
+    "reason": ""
+  }
 } satisfies StateMsg;
 
 export const stateIdle = {
@@ -186,7 +200,8 @@ export const stateIdle = {
     "collisions": 0,
     "events": []
   },
-  "incidents": []
+  "incidents": [],
+  "ghost": null
 } satisfies StateMsg;
 
 export const ackRejected = {
@@ -424,6 +439,97 @@ export const healthStarting = {
   "sumoStepMsP50": null
 } satisfies HealthMsg;
 
+export const results = {
+  "available": true,
+  "generatedAt": "2026-10-05T18:00:00+00:00",
+  "note": "Autopilot batch runs (the live demo is driven manually). Rule-based, simulated.",
+  "baseline": "off_strict_static",
+  "experiments": [
+    {
+      "scenario": "grid4x4",
+      "scale": 1.5,
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "pairingOk": true,
+      "signalProgram": "tuned",
+      "cycleS": 35.2,
+      "arms": [
+        {
+          "arm": "off_strict_static",
+          "label": "OFF strict \u00b7 static",
+          "signals": "off_strict",
+          "routing": "static",
+          "runs": 3,
+          "valid": 3,
+          "travelMean": 180.4,
+          "travelCi": [
+            160.2,
+            201.0
+          ],
+          "waitMean": 41.0,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergencyBrakings": 1,
+            "teleports": 0
+          },
+          "travelVsBaseline": null,
+          "bgDelayVsBaseline": null
+        },
+        {
+          "arm": "coord_dynamic",
+          "label": "COORD \u00b7 dynamic",
+          "signals": "coord",
+          "routing": "dynamic",
+          "runs": 3,
+          "valid": 3,
+          "travelMean": 120.1,
+          "travelCi": [
+            110.0,
+            130.5
+          ],
+          "waitMean": 0.4,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergencyBrakings": 1,
+            "teleports": 0
+          },
+          "travelVsBaseline": {
+            "n": 3,
+            "meanDiff": -60.3,
+            "ci": [
+              -80.1,
+              -41.2
+            ],
+            "p": 0.25
+          },
+          "bgDelayVsBaseline": {
+            "n": 3,
+            "meanDiff": 812.0,
+            "ci": [
+              300.5,
+              1300.0
+            ],
+            "p": 0.25
+          }
+        }
+      ]
+    }
+  ]
+} satisfies ResultsMsg;
+
+export const noResults = {
+  "available": false,
+  "generatedAt": null,
+  "note": "no experiment results yet",
+  "baseline": "",
+  "experiments": []
+} satisfies ResultsMsg;
+
 export const commands = [
   {
     "v": 1,
@@ -536,5 +642,20 @@ export const BACKEND_ENUMS = {
   ],
   "incidentType": [
     "accident"
+  ],
+  "ghostPhase": [
+    "driving",
+    "arrived",
+    "unavailable"
+  ],
+  "resultSignals": [
+    "off_strict",
+    "off_realistic",
+    "basic",
+    "coord"
+  ],
+  "signalProgram": [
+    "tuned",
+    "net"
   ]
 } as const;

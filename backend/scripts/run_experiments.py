@@ -165,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
             f"\n{experiment['scenario']} x{experiment['scale']:g}: {seeds} seeds, pairing ok: {ok}"
         )
         for arm in experiment["arms"]:
-            vs = arm.get("travel_s_vs_baseline")
+            vs = arm["travel_vs_baseline"]
             diff = (
                 f"{vs['mean_diff']:+.1f} s [{vs['ci'][0]:+.1f}, {vs['ci'][1]:+.1f}] p={vs['p']:.3g}"
                 if vs and vs["mean_diff"] is not None
