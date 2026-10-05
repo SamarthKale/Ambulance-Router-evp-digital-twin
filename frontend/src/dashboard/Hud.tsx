@@ -311,7 +311,7 @@ function GhostLine({ ghost, timeSaved }: { ghost: GhostMsg; timeSaved: number | 
           {timeSaved != null && (
             <strong className={timeSaved >= 0 ? "saved" : "lost"}>
               {" "}
-              · {timeSaved >= 0 ? "saved" : "lost"} {Math.abs(timeSaved).toFixed(1)} s
+              · {timeSaved >= 0 ? "saved" : "lost"} {`${Math.abs(timeSaved).toFixed(1)} s`}
             </strong>
           )}
         </span>
