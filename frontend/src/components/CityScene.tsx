@@ -11,6 +11,7 @@ import { CameraRig } from "./CameraRig";
 import { City3D } from "./City3D";
 import { buildCityLayout } from "./cityLayout";
 import { FRAME, screen } from "./lod";
+import { RouteOverlay } from "./RouteOverlay";
 import { Sky } from "./Sky";
 import { LinkDiscs, SignalHeads } from "./TrafficLights";
 import { TrafficVehicles } from "./Vehicles";
@@ -31,6 +32,7 @@ export function CityScene({ network }: { network: NetworkMsg }) {
       <City3D network={network} origin={origin} layout={layout} showLabels={top} />
       <SignalHeads heads={layout.signalHeads} />
       {top && <LinkDiscs network={network} origin={origin} />}
+      <RouteOverlay network={network} origin={origin} />
       <TrafficVehicles />
       <Ambulance />
       <CameraRig network={network} origin={origin} />

@@ -52,7 +52,13 @@ LANE_CHANGE_ROOM_M = 25.0  # road needed per lane change before the stop line...
 LANE_CHANGE_TIME_S = 2.0  # ...or this long at the current speed, whichever is more
 
 Edge = sumolib.net.edge.Edge
-_AMBULANCE_VARS = (tc.VAR_NEXT_TLS, tc.VAR_STOPSTATE, tc.VAR_LANEPOSITION)
+_AMBULANCE_VARS = (
+    tc.VAR_NEXT_TLS,
+    tc.VAR_STOPSTATE,
+    tc.VAR_LANEPOSITION,
+    tc.VAR_EDGES,  # the route SUMO is following (current road + the planned next one)
+    tc.VAR_ROUTE_INDEX,
+)
 _STOPPED = 1  # bit 0 of VAR_STOPSTATE
 _LANE_BLOCKED = (
     tc.LCA_BLOCKED_BY_LEFT_LEADER
@@ -161,6 +167,41 @@ class ManualController:
             mission_time=end - self._spawned_at,
         )
 
+    # ---- position on the network (for routing) ------------------------------
+    @property
+    def lane_position(self) -> float:
+        """m from the start of the ambulance's current lane."""
+        return float(self._subscribed(tc.VAR_LANEPOSITION, 0.0))
+
+    @property
+    def upcoming_edge(self) -> str | None:
+        """The road after the junction the ambulance is in or heading to (its SUMO route)."""
+        edges = self._subscribed(tc.VAR_EDGES, ())
+        index = int(self._subscribed(tc.VAR_ROUTE_INDEX, -1))
+        if 0 <= index + 1 < len(edges):
+            return str(edges[index + 1])
+        return None
+
+    @property
+    def planned(self) -> PlannedTurn | None:
+        return self._planned
+
+    def request_target(self, target_edge: str) -> CommandResult:
+        """Take `target_edge` at the next junction (autopilot): same checks as a turn key."""
+        problem = self._not_driving()
+        if problem:
+            return problem
+        assert self._vehicle is not None
+        if self._vehicle.edge.startswith(":"):
+            return CommandResult(False, "inside a junction")
+        if self._planned is not None and self._planned.edge == target_edge:
+            return OK
+        edge = self._net.getEdge(self._vehicle.edge)
+        target = next((t for t in edge.getOutgoing() if t.getID() == target_edge), None)
+        if target is None:
+            return CommandResult(False, f"{target_edge} does not leave {edge.getToNode().getID()}")
+        return self._plan_target(self._vehicle, edge, target, check_lanes=True)
+
     # ---- commands (engine, simulation thread) -------------------------------
     def set_drive(self, throttle: float, brake: float) -> None:
         self._throttle = _clamp01(throttle)
@@ -259,17 +300,25 @@ class ManualController:
         if choice is None:
             what = f"{direction} turn" if direction else "way on"
             return CommandResult(False, f"no {what} at {junction}")
-        turn, target = choice
-        if direction is not None:
+        _, target = choice
+        return self._plan_target(vehicle, edge, target, check_lanes=direction is not None)
+
+    def _plan_target(
+        self, vehicle: VehicleState, edge: Edge, target: Edge, check_lanes: bool
+    ) -> CommandResult:
+        junction = edge.getToNode().getID()
+        turn = _turn_between(edge, target)
+        if check_lanes:
             exits = self._lanes_to(edge, target)
             if vehicle.lane not in exits:
                 changes = min(abs(vehicle.lane - lane) for lane in exits)
                 room = self._room_left(vehicle)
                 if room < changes * self._room_per_change(vehicle):
                     lane = _lane_name(edge, min(exits, key=lambda i: abs(vehicle.lane - i)))
+                    what = f"turn {turn}" if turn in ("left", "right") else f"go {turn}"
                     return CommandResult(
                         False,
-                        f"too late to turn {direction} at {junction}: "
+                        f"too late to {what} at {junction}: "
                         f"needs the {lane}, only {room:.0f} m left",
                     )
         try:
@@ -350,3 +399,12 @@ def _heading(edge: Edge, at_end: bool) -> float:
 def _signed_turn(a: float, b: float) -> float:
     d = b - a
     return math.degrees(math.atan2(math.sin(d), math.cos(d)))  # + = left (counter-clockwise)
+
+
+def _turn_between(edge: Edge, target: Edge) -> TurnKind:
+    if target.getToNode() == edge.getFromNode():
+        return "uturn"
+    angle = _signed_turn(_heading(edge, at_end=True), _heading(target, at_end=False))
+    if abs(angle) <= TURN_MIN_DEG:
+        return "straight"
+    return "left" if angle > 0 else "right"

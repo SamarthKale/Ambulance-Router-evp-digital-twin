@@ -238,6 +238,30 @@ button.primary:hover:not(:disabled) {
   background: #dc2626;
 }
 
+.route-card {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.route-card .eta {
+  font-size: 18px;
+  font-weight: 700;
+  color: #22d3ee;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-card.off-plan .eta {
+  color: #f59e0b;
+}
+
+.tag.hint {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
 .asset-status {
   padding: 0 2px;
 }

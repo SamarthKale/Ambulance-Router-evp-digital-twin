@@ -12,7 +12,13 @@ from pathlib import Path
 import psutil
 import pytest
 
-from simulation.sumo import STEP_LENGTH, SumoConfig, SumoSimulation, find_sumo_binary
+from simulation.sumo import (
+    STEP_LENGTH,
+    SignalState,
+    SumoConfig,
+    SumoSimulation,
+    find_sumo_binary,
+)
 
 SimFactory = Callable[..., SumoSimulation]  # the make_sim fixture in conftest.py
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -51,7 +57,13 @@ def test_signals_cycle_through_every_phase_in_74_s(make_sim: SimFactory) -> None
                     switches[sig.tls_id].append((snap.time, sig.phase))
                     last_phase[sig.tls_id] = sig.phase
 
-    assert snap.signals == start.signals  # one full cycle later, back at the start
+    # one full cycle later, back at the start, with the next switch exactly a cycle later
+    def at(signals: tuple[SignalState, ...]) -> list[tuple[str, str, int, str]]:
+        return [(s.tls_id, s.state, s.phase, s.program) for s in signals]
+
+    assert at(snap.signals) == at(start.signals)
+    for now, before in zip(snap.signals, start.signals, strict=True):
+        assert now.next_switch - before.next_switch == pytest.approx(CYCLE_S)
     for tls, phases in programs.items():
         observed = switches[tls]
         assert [p for _, p in observed] == [*range(1, len(phases)), 0], tls
