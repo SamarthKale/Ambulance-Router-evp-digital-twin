@@ -6,8 +6,9 @@ at 10 Hz real time and publishes an immutable EngineState.
 Tests can drive open()/tick()/close() synchronously instead of starting the thread.
 
 Tick order:
-  commands -> manual.step -> controller.step -> traffic_lights.apply -> simulationStep
-  -> manual.observe -> monitor.observe -> rule -> controller.request_* -> publish
+  commands -> autopilot (batch) -> manual.step -> controller.step -> traffic_lights.apply
+  -> simulationStep -> manual.observe -> monitor.observe -> rule -> controller.request_*
+  -> route (every ROUTE_EVERY_S, or on a new road) -> publish
 """
 
 from __future__ import annotations
@@ -23,6 +24,16 @@ from dataclasses import dataclass
 from itertools import count
 from typing import Literal
 
+from ai.routing import (
+    Conditions,
+    EdgeTraffic,
+    RoutePlan,
+    RouteTurn,
+    SignalClock,
+    clearly_faster,
+    evaluate_route,
+    plan_route,
+)
 from ai.rules import AmbulanceView, Preempt, Release, RuleAction, basic_preemption
 from safety.controller import SafetyController, SafetyEvent, Stage, UnsafePlanError
 from safety.monitor import SafetyMonitor
@@ -40,8 +51,11 @@ RESTART_DELAY_S = 1.0  # after a crash, wait this long before restarting SUMO
 MAX_LAG_S = STEP_LENGTH
 RECENT_EVENTS = 8
 STATS_WINDOW = 300  # ticks (30 s) for the timing percentiles
+ROUTE_EVERY_S = 1.0  # re-plan on a timer (and on every new road), not every step
 
 Mode = Literal["OFF", "BASIC", "COORD"]
+Routing = Literal["dynamic", "static"]  # live costs, or free-flow costs fixed at dispatch
+Control = Literal["manual", "autopilot"]  # autopilot: batch experiments only (section 14)
 Rule = Callable[[AmbulanceView | None, Iterable[str]], list[RuleAction]]
 
 
@@ -104,12 +118,26 @@ def _percentile(sorted_values: list[float], q: float) -> float | None:
 
 
 @dataclass(frozen=True)
+class RouteStatus:
+    """The suggested route (advisory while driving manually) and how the ambulance stands."""
+
+    plan: RoutePlan  # as computed at plan.computed_at
+    routing: Routing
+    edges: tuple[str, ...]  # the plan from the ambulance's road on
+    turns: tuple[RouteTurn, ...]  # the junctions still ahead
+    eta_s: float  # counted down since the plan was made
+    distance_m: float  # remaining along the suggested route, from where the ambulance is
+    follows: bool  # the road the ambulance will take next is the suggested one
+
+
+@dataclass(frozen=True)
 class EngineState:
     seq: int
     mode: Mode
     snapshot: Snapshot
     ambulance: AmbulanceStatus
     safety: SafetyStatus
+    route: RouteStatus | None = None
 
 
 class SimulationEngine:
@@ -123,11 +151,20 @@ class SimulationEngine:
         mode: Mode = "OFF",
         rule: Rule = basic_preemption,
         warmup_s: float = 0.0,  # fast-forward this much simulated time on open (live demo)
+        routing: Routing = "dynamic",
+        control: Control = "manual",
     ) -> None:
         self.config = config
         self.warmup_s = warmup_s
+        self.routing: Routing = routing
+        self.control: Control = control
         self.network = RoadNetwork(config.scenario)
+        self.graph = self.network.road_graph()
+        self._successors = self.graph.successors()
         self.tables = load_signal_tables(config.net_path)
+        self._programs = {tls: table.phases for tls, table in self.tables.items()}
+        self._route: RoutePlan | None = None
+        self._route_start = ""
         self.realtime = realtime
         self.mode: Mode = mode
         self.error: str | None = None
@@ -210,9 +247,13 @@ class SimulationEngine:
         self._collisions = 0
         self._now = self._sim.snapshot().time
         self._ambulance_class = None
+        self._route, self._route_start = None, ""
         while self._now < self.warmup_s - STEP_LENGTH / 2:  # traffic already on the roads
             snap = self._sim.step()
             self._collisions += snap.collisions
+            # The monitor watches the warm-up too: started mid-cycle it would not know how
+            # long a link has been red, and would flag the next normal green as an R3 breach.
+            self._monitor.observe(snap.time, ((s.tls_id, s.state) for s in snap.signals))
             self._now = snap.time
 
     def close(self) -> None:
@@ -226,6 +267,8 @@ class SimulationEngine:
         started = time.perf_counter()
         self._apply_commands()
         sim, manual, lights = self._require()
+        if self.control == "autopilot":
+            self._autopilot()
         manual.step(STEP_LENGTH)
         lights.apply(self._controller.step(self._now))
         step_started = time.perf_counter()
@@ -239,10 +282,144 @@ class SimulationEngine:
         if self.mode == "BASIC":
             self._run_rule(snap, vehicle, ambulance)
         self._now = snap.time
-        state = EngineState(next(self._seq), self.mode, snap, ambulance, self._safety_status())
+        route = self._update_route(snap, vehicle, ambulance)
+        state = EngineState(
+            next(self._seq), self.mode, snap, ambulance, self._safety_status(), route
+        )
         self._latest = state
         self._tick_ms.append((time.perf_counter() - started) * 1000)
         return state
+
+    # ---- routing (advisory while driving manually; followed by the batch autopilot) -----
+    def _update_route(
+        self, snap: Snapshot, vehicle: VehicleState | None, ambulance: AmbulanceStatus
+    ) -> RouteStatus | None:
+        _, manual, _ = self._require()
+        if vehicle is None or ambulance.status != "driving":
+            self._route, self._route_start = None, ""
+            return None
+        if vehicle.edge.startswith(":"):  # inside a junction: plan from the road after it
+            start, pos = manual.upcoming_edge, 0.0
+        else:
+            start, pos = vehicle.edge, manual.lane_position
+        if start is None or start not in self.graph.edges:
+            return None
+        plan = self._route
+        stale = plan is None or start != self._route_start
+        if plan is not None and self.routing == "dynamic":
+            stale = stale or snap.time - plan.computed_at >= ROUTE_EVERY_S - 1e-6
+        elif plan is not None and start in plan.edges:
+            stale = False  # static: keep the dispatch plan while the ambulance stays on it
+        if stale:
+            hospital = self.network.hospital
+            conditions = self._conditions(snap, vehicle)
+            fresh = plan_route(
+                self.graph, start, pos, hospital.edge, hospital.pos, conditions, vehicle.speed
+            )
+            if fresh is not None and plan is not None and start in plan.edges:
+                # keep the current suggestion (re-priced) unless the new one is clearly faster
+                kept = evaluate_route(
+                    self.graph,
+                    plan.edges[plan.edges.index(start) :],
+                    pos,
+                    hospital.pos,
+                    conditions,
+                    vehicle.speed,
+                )
+                if kept is not None and not clearly_faster(fresh, kept):
+                    fresh = kept
+            if fresh is not None:
+                plan, self._route, self._route_start = fresh, fresh, start
+        if plan is None:
+            return None
+        index = plan.edges.index(start) if start in plan.edges else 0
+        ahead = plan.edges[index:]
+        distance = self._remaining_m(ahead, pos)
+        follows = vehicle.edge.startswith(":") or (
+            len(ahead) < 2
+            or ambulance.planned_turn is None
+            or ambulance.planned_turn.edge == ahead[1]
+        )
+        return RouteStatus(
+            plan=plan,
+            routing=self.routing,
+            edges=ahead,
+            turns=plan.turns[index:],
+            eta_s=max(0.0, plan.eta_s - (snap.time - plan.computed_at)),
+            distance_m=distance,
+            follows=follows,
+        )
+
+    def _remaining_m(self, edges: tuple[str, ...], pos: float) -> float:
+        hospital = self.network.hospital
+        if len(edges) == 1:
+            return max(0.0, hospital.pos - pos)
+        lengths = self.graph.edges
+        middle = sum(lengths[e].length for e in edges[1:-1])
+        return max(0.0, lengths[edges[0]].length - pos) + middle + hospital.pos
+
+    def _conditions(self, snap: Snapshot, vehicle: VehicleState) -> Conditions:
+        if self.routing == "static":  # free flow, average signal waits: what a map would say
+            return Conditions(now=snap.time, mode=self.mode, programs=self._programs)
+        traffic = {}
+        for edge_id, e in snap.edges.items():
+            if edge_id == vehicle.edge:
+                # The ambulance's own road: cars on it are as likely behind as ahead, and the
+                # averages can't tell; only the queue at the stop line counts (minus itself).
+                halting = max(0, e.halting - int(vehicle.speed < 0.1))
+                traffic[edge_id] = EdgeTraffic(self.graph.edges[edge_id].speed, halting, halting)
+            else:
+                traffic[edge_id] = EdgeTraffic(e.mean_speed, e.halting, e.vehicles)
+        stages = self._controller.stages()
+        signals = {
+            s.tls_id: SignalClock(
+                phase=s.phase,
+                next_switch=s.next_switch,
+                phases=self._programs[s.tls_id],
+                under_program=stages.get(s.tls_id) == "program"
+                and s.program == self.tables[s.tls_id].program_id,
+            )
+            for s in snap.signals
+            if s.tls_id in self._programs
+        }
+        return Conditions(
+            now=snap.time,
+            mode=self.mode,
+            traffic=traffic,
+            signals=signals,
+            programs=self._programs,
+        )
+
+    def _autopilot(self) -> None:
+        """Batch runs: full throttle, and take the suggested road at every junction once the
+        safety controller has accepted the route (CLAUDE.md section 2.3)."""
+        sim, manual, _ = self._require()
+        latest = self._latest
+        vehicle = latest.snapshot.vehicle(AMBULANCE_ID) if latest else None
+        if vehicle is None or latest is None or latest.ambulance.status != "driving":
+            return
+        manual.set_drive(1.0, 0.0)
+        plan = self._route
+        if plan is None or vehicle.edge != plan.edges[0] or len(plan.edges) < 2:
+            return
+        target = plan.edges[1]
+        planned = manual.planned
+        if planned is not None and planned.edge == target:
+            return
+        if self._ambulance_class is None:
+            self._ambulance_class = sim.connection.vehicle.getVehicleClass(AMBULANCE_ID)
+        decision = self._controller.review_reroute(
+            self._now,
+            AMBULANCE_ID,
+            self._ambulance_class,
+            junction=self.graph.edges[vehicle.edge].to_node,
+            current_edge=vehicle.edge,
+            route=plan.edges,
+            successors=self._successors,
+            destination=self.network.hospital.edge,
+        )
+        if decision.accepted:
+            manual.request_target(target)
 
     def _run_rule(
         self, snap: Snapshot, vehicle: VehicleState | None, ambulance: AmbulanceStatus

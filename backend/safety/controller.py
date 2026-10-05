@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -64,7 +64,7 @@ class SafetyEvent:
     time: float
     junction: str
     vehicle: str | None
-    action: str  # preempt, green, release, timeout, recover, resume, fail_safe
+    action: str  # preempt, green, release, timeout, recover, resume, fail_safe, reroute
     accepted: bool
     reason: str
 
@@ -131,6 +131,7 @@ class SafetyController:
         self._junctions = {tls: _Junction(table) for tls, table in tables.items()}
         self.events: deque[SafetyEvent] = deque(maxlen=EVENT_HISTORY)
         self.signals_preempted = 0
+        self._last_reroute: tuple[str, tuple[str, ...], bool] | None = None
 
     # ---- queries -------------------------------------------------------------------
     def stage(self, tls_id: str) -> Stage:
@@ -229,6 +230,49 @@ class SafetyController:
         self._log(now, tls_id, vehicle_id, "release", True, reason)
         self._start_recovery(now, j)
         return Decision(True, reason, "released")
+
+    def review_reroute(
+        self,
+        now: float,
+        vehicle_id: str,
+        vehicle_class: str,
+        junction: str,
+        current_edge: str,
+        route: Sequence[str],
+        successors: Mapping[str, frozenset[str]],
+        destination: str,
+        closed: frozenset[str] = frozenset(),
+    ) -> Decision:
+        """Check an autopilot route before it reaches SUMO (CLAUDE.md section 2.3).
+
+        Accepted only if the vehicle is an emergency vehicle, the route starts on the road
+        it is on, every step is a real movement, it avoids closed roads and it ends at the
+        destination. `junction` is where the route next turns (for the log)."""
+        problem = ""
+        if vehicle_class != EMERGENCY_CLASS:
+            code, problem = "unauthorized", f"vehicle class '{vehicle_class}' may not be rerouted"
+        elif not route or route[0] != current_edge:
+            first = route[0] if route else "nothing"
+            code, problem = "stale", f"route starts at {first}, vehicle is on {current_edge}"
+        elif route[-1] != destination:
+            code, problem = "destination", f"route ends at {route[-1]}, not at {destination}"
+        else:
+            code = ""
+            for a, b in zip(route, route[1:], strict=False):
+                if b not in successors.get(a, frozenset()):
+                    code, problem = "disconnected", f"no movement from {a} to {b}"
+                    break
+                if b in closed:
+                    code, problem = "closed", f"{b} is closed"
+                    break
+        accepted = not problem
+        key = (vehicle_id, tuple(route), accepted)
+        if key != self._last_reroute:  # the autopilot re-asks as it drives: log changes only
+            self._last_reroute = key
+            via = " -> ".join(route[1:3]) + (" ..." if len(route) > 3 else "")
+            reason = f"route via {via} to {destination}" if accepted else f"rejected: {problem}"
+            self._log(now, junction, vehicle_id, "reroute", accepted, reason)
+        return Decision(accepted, problem or "route accepted", code or "accepted")
 
     def release_all(self, now: float, reason: str, action: str = "release") -> None:
         """Recover every preempted junction (mode switched off, decision logic failed...)."""

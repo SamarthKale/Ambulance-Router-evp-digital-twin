@@ -75,9 +75,35 @@ export const stateDriving = {
     "queuedTurn": "right",
     "missionTime": 41.5
   },
-  "route": null,
+  "route": {
+    "edges": [
+      "A0_B0",
+      "B0_B1",
+      "B1_e1"
+    ],
+    "turns": [
+      {
+        "junction": "B0",
+        "turn": "left",
+        "edge": "B0_B1"
+      },
+      {
+        "junction": "B1",
+        "turn": "right",
+        "edge": "B1_e1"
+      }
+    ],
+    "eta": 31.4,
+    "distance": 512.0,
+    "follows": true,
+    "routing": "dynamic",
+    "computedAt": 123.0,
+    "drive": 27.9,
+    "queue": 3.5,
+    "signal": 0.0
+  },
   "metrics": {
-    "eta": null,
+    "eta": 31.4,
     "signalsPreempted": 2,
     "queueCleared": null,
     "timeSaved": null
@@ -470,5 +496,9 @@ export const BACKEND_ENUMS = {
     "starting",
     "running",
     "error"
+  ],
+  "routing": [
+    "dynamic",
+    "static"
   ]
 } as const;

@@ -9,12 +9,15 @@ import { useAssetStore } from "../assets/loader";
 import { ASSET_KEYS } from "../assets/manifest";
 import { useSkyStore } from "../components/Sky";
 import { CONTROL_COLORS, signalColor } from "../components/vehicleStyles";
+import { TURN_ARROW } from "../components/RouteOverlay";
 import {
   ambulanceOf,
   median,
   useSim,
   type NetworkMsg,
+  type RouteMsg,
   type SignalMode,
+  type TurnKind,
   type ViewMode,
 } from "../simulation/state";
 import { HUD_LEFT_PX, HUD_MARGIN_PX, HUD_RIGHT_PX } from "./layout";
@@ -156,6 +159,7 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease }: HudProp
             </div>
           )}
           {vehicle && <div className="hud-row muted">{laneName}</div>}
+          {msg?.route && <RouteCard route={msg.route} />}
         </section>
 
         {s.lastReply && (s.lastReply.type === "error" || !s.lastReply.ok || s.lastReply.reason) && (
@@ -186,6 +190,47 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease }: HudProp
         <AssetStatus />
       </div>
     </>
+  );
+}
+
+const TURN_KEY: Partial<Record<TurnKind, string>> = { left: "A", right: "D" };
+
+export function formatEta(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export function formatDistance(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
+}
+
+/** Suggested route: advisory only, the driver decides (CLAUDE.md section 2.6). */
+function RouteCard({ route }: { route: RouteMsg }) {
+  const next = route.turns[0];
+  const key = next ? TURN_KEY[next.turn] : undefined;
+  return (
+    <div className={`route-card ${route.follows ? "" : "off-plan"}`}>
+      <div className="hud-row">
+        <span className="eta">ETA {formatEta(route.eta)}</span>
+        <span className="muted">{formatDistance(route.distance)} to the hospital</span>
+      </div>
+      {next && (
+        <div className="hud-row">
+          suggested:{" "}
+          <strong>
+            {TURN_ARROW[next.turn]} {next.turn.toUpperCase()}
+          </strong>{" "}
+          at {next.junction}
+          {!route.follows && (
+            <span className="tag hint">{key ? `press ${key}` : "your plan differs"}</span>
+          )}
+        </div>
+      )}
+      <div className="muted small">
+        {route.routing} route · drive {route.drive.toFixed(0)} s · queues {route.queue.toFixed(0)} s · signals{" "}
+        {route.signal.toFixed(0)} s
+      </div>
+    </div>
   );
 }
 

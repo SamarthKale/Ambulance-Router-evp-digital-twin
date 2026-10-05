@@ -28,6 +28,8 @@ from api.protocol import (
     NetworkMsg,
     NextSignalMsg,
     PlannedTurnMsg,
+    RouteMsg,
+    RouteTurnMsg,
     SafetyEventMsg,
     SafetyMsg,
     SessionMsg,
@@ -66,6 +68,7 @@ ENUMS: dict[str, tuple[type[BaseModel], str]] = {
     "missionStatus": (AmbulanceMsg, "status"),
     "turn": (PlannedTurnMsg, "turn"),
     "healthStatus": (HealthMsg, "status"),
+    "routing": (RouteMsg, "routing"),
 }
 
 
@@ -112,7 +115,20 @@ def server_examples() -> dict[str, tuple[str, Any]]:
             queued_turn="right",
             mission_time=41.5,
         ),
-        metrics=MetricsMsg(signals_preempted=2),
+        route=RouteMsg(
+            edges=["A0_B0", "B0_B1", "B1_e1"],
+            turns=[RouteTurnMsg(junction="B0", turn="left", edge="B0_B1"),
+                   RouteTurnMsg(junction="B1", turn="right", edge="B1_e1")],
+            eta=31.4,
+            distance=512.0,
+            follows=True,
+            routing="dynamic",
+            computed_at=123.0,
+            drive=27.9,
+            queue=3.5,
+            signal=0.0,
+        ),  # fmt: skip
+        metrics=MetricsMsg(eta=31.4, signals_preempted=2),
         safety=SafetyMsg(
             violations=0,
             collisions=0,

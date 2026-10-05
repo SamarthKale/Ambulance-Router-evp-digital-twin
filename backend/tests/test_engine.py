@@ -42,6 +42,22 @@ def test_thread_runs_at_10_hz_and_stops_without_orphans(tmp_path: Path) -> None:
     assert not any(t.name == "sumo-engine" for t in threading.enumerate())
 
 
+def test_monitor_knows_the_warm_up_history(tmp_path: Path) -> None:
+    """Regression (Sprint 6): the monitor used to start after the warm-up. Ending the warm-up
+    in an all-red (35-37 s of the 74 s cycle) made the next normal green look like a
+    clearance shorter than 2 s, a false R3 violation."""
+    engine = SimulationEngine(
+        SumoConfig(log_path=tmp_path / "sumo.log"), realtime=False, warmup_s=36.5
+    )
+    engine.open()
+    try:
+        for _ in range(30):
+            state = engine.tick()
+        assert state.safety.violations == 0
+    finally:
+        engine.close()
+
+
 def test_engine_restarts_sumo_after_a_crash(tmp_path: Path) -> None:
     states: list[EngineState] = []
     engine = SimulationEngine(SumoConfig(log_path=tmp_path / "sumo.log"))

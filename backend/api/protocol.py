@@ -17,6 +17,7 @@ from simulation.engine import (
     Drive,
     EngineState,
     Reset,
+    RouteStatus,
     SetMode,
     SpawnAmbulance,
     Turn,
@@ -202,8 +203,29 @@ class AmbulanceMsg(Message):
     mission_time: float | None = None
 
 
+class RouteTurnMsg(Message):
+    junction: str
+    turn: Literal["left", "straight", "right", "uturn"]
+    edge: str  # road taken after the junction
+
+
+class RouteMsg(Message):
+    """Suggested route to the hospital (advisory: it never steers a manually driven ambulance)."""
+
+    edges: list[str]  # from the ambulance's road (or the one after its junction) to the hospital
+    turns: list[RouteTurnMsg]  # junction by junction
+    eta: float  # s, predicted, counted down between re-plans
+    distance: float  # m remaining along the route
+    follows: bool  # the road the ambulance will take next is the suggested one
+    routing: Literal["dynamic", "static"]
+    computed_at: float  # simulation time of the plan
+    drive: float  # s of the plan's ETA spent driving...
+    queue: float  # ...waiting for queues to discharge...
+    signal: float  # ...and waiting at red lights
+
+
 class MetricsMsg(Message):
-    eta: float | None = None  # Sprint 6
+    eta: float | None = None  # s to the hospital along the suggested route
     signals_preempted: int = 0  # preemptions that reached green, since the simulation started
     queue_cleared: int | None = None  # Sprint 7
     time_saved: float | None = None  # only ever measured (ghost run, Sprint 9)
@@ -233,19 +255,41 @@ class StateMsg(Message):
     vehicles: list[VehicleMsg]
     signals: list[SignalMsg]
     ambulance: AmbulanceMsg
-    route: None = None  # Sprint 6
+    route: RouteMsg | None = None
     metrics: MetricsMsg = MetricsMsg()
     safety: SafetyMsg
     incidents: list[str] = []  # Sprint 8
 
 
+def route_message(route: RouteStatus | None) -> RouteMsg | None:
+    if route is None:
+        return None
+    plan = route.plan
+    return RouteMsg(
+        edges=list(route.edges),
+        turns=[RouteTurnMsg(junction=t.junction, turn=t.turn, edge=t.edge) for t in route.turns],
+        eta=round(route.eta_s, 1),
+        distance=round(route.distance_m, 1),
+        follows=route.follows,
+        routing=route.routing,
+        computed_at=round(plan.computed_at, 3),
+        drive=round(plan.drive_s, 1),
+        queue=round(plan.queue_s, 1),
+        signal=round(plan.signal_s, 1),
+    )
+
+
 def state_message(state: EngineState) -> StateMsg:
     snap, amb, safety = state.snapshot, state.ambulance, state.safety
+    route = route_message(state.route)
     return StateMsg(
         seq=state.seq,
         t=round(snap.time, 3),
         mode=state.mode,
-        metrics=MetricsMsg(signals_preempted=safety.signals_preempted),
+        route=route,
+        metrics=MetricsMsg(
+            eta=route.eta if route else None, signals_preempted=safety.signals_preempted
+        ),
         safety=SafetyMsg(
             violations=safety.violations,
             collisions=safety.collisions,

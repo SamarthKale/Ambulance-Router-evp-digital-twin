@@ -21,7 +21,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
 from typing import IO, Any
@@ -38,8 +38,19 @@ SCENARIOS_DIR = REPO_ROOT / "scenarios"
 STEP_LENGTH = 0.1  # s, fixed for every run (CLAUDE.md section 6)
 CONNECT_TIMEOUT_S = 10.0
 SHUTDOWN_TIMEOUT_S = 5.0
-_TLS_VARS = (tc.TL_RED_YELLOW_GREEN_STATE, tc.TL_CURRENT_PHASE, tc.TL_CURRENT_PROGRAM)
+_TLS_VARS = (
+    tc.TL_RED_YELLOW_GREEN_STATE,
+    tc.TL_CURRENT_PHASE,
+    tc.TL_CURRENT_PROGRAM,
+    tc.TL_NEXT_SWITCH,
+)
 _SIMULATION_VARS = (tc.VAR_TIME, tc.VAR_COLLIDING_VEHICLES_NUMBER)
+# Live edge conditions for routing: one subscription per road, read with every step.
+_EDGE_VARS = (
+    tc.LAST_STEP_MEAN_SPEED,
+    tc.LAST_STEP_VEHICLE_HALTING_NUMBER,
+    tc.LAST_STEP_VEHICLE_NUMBER,
+)
 _VEHICLE_VARS = (
     tc.VAR_POSITION,
     tc.VAR_ANGLE,
@@ -116,6 +127,14 @@ class SignalState:
     state: str  # one SUMO signal char per controlled link (G g y r ...)
     phase: int
     program: str
+    next_switch: float = 0.0  # simulation time at which the current phase ends
+
+
+@dataclass(frozen=True)
+class EdgeState:
+    mean_speed: float  # m/s over the vehicles on it (SUMO reports the limit when empty)
+    halting: int  # vehicles below 0.1 m/s
+    vehicles: int
 
 
 @dataclass(frozen=True)
@@ -136,6 +155,7 @@ class Snapshot:
     signals: tuple[SignalState, ...]
     vehicles: tuple[VehicleState, ...]
     collisions: int = 0  # vehicles involved in a collision during the last step (SUMO)
+    edges: Mapping[str, EdgeState] = field(default_factory=dict)  # roads only, not junctions
 
     @property
     def vehicle_count(self) -> int:
@@ -156,6 +176,7 @@ class SumoSimulation:
         self._conn: Connection | None = None
         self._log: IO[bytes] | None = None
         self._tls_ids: tuple[str, ...] = ()
+        self._edge_ids: tuple[str, ...] = ()
         self._context_anchor = ""
 
     # ---- lifecycle -------------------------------------------------------
@@ -178,6 +199,11 @@ class SumoSimulation:
             self._tls_ids = tuple(sorted(self._conn.trafficlight.getIDList()))
             for tls_id in self._tls_ids:
                 self._conn.trafficlight.subscribe(tls_id, _TLS_VARS)
+            self._edge_ids = tuple(
+                e for e in sorted(self._conn.edge.getIDList()) if not e.startswith(":")
+            )
+            for edge_id in self._edge_ids:
+                self._conn.edge.subscribe(edge_id, _EDGE_VARS)
             self._subscribe_all_vehicles(self._conn)
             self._conn.simulation.subscribe(_SIMULATION_VARS)
         except BaseException:
@@ -278,17 +304,28 @@ class SumoSimulation:
                 state=results[tls_id][tc.TL_RED_YELLOW_GREEN_STATE],
                 phase=results[tls_id][tc.TL_CURRENT_PHASE],
                 program=results[tls_id][tc.TL_CURRENT_PROGRAM],
+                next_switch=float(results[tls_id][tc.TL_NEXT_SWITCH]),
             )
             for tls_id in self._tls_ids
         )
         context = conn.junction.getContextSubscriptionResults(self._context_anchor) or {}
         vehicles = tuple(_vehicle_state(vid, context[vid]) for vid in sorted(context))
         sim_vars = conn.simulation.getSubscriptionResults()
+        edge_vars = conn.edge.getAllSubscriptionResults()
+        edges = {
+            e: EdgeState(
+                mean_speed=float(v[tc.LAST_STEP_MEAN_SPEED]),
+                halting=int(v[tc.LAST_STEP_VEHICLE_HALTING_NUMBER]),
+                vehicles=int(v[tc.LAST_STEP_VEHICLE_NUMBER]),
+            )
+            for e, v in edge_vars.items()
+        }
         return Snapshot(
             time=float(sim_vars[tc.VAR_TIME]),
             signals=signals,
             vehicles=vehicles,
             collisions=int(sim_vars[tc.VAR_COLLIDING_VEHICLES_NUMBER]),
+            edges=edges,
         )
 
     def signal_program(self, tls_id: str) -> tuple[tuple[str, float], ...]:

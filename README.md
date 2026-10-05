@@ -16,7 +16,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 3 | Safety controller + independent safety monitor + BASIC signal preemption (OFF/BASIC) | done |
 | 4 | Demo hardening: protocol contract test, driver lock, reconnect, 4x4 grid + performance benchmark | done |
 | 5 | 3D city with the team's delivered models: asset manifest, instancing + LOD, chase/orbit/map cameras, HDRI sky, `/assets` page, `check:assets` | done |
-| 6 | Shortest-path routing with live costs, route overlay, ETA | next |
+| 6 | Live-cost shortest-path routing: route overlay, ETA and distance, advisory turn hints, seeded ETA check | done |
+| 7 | COORD: queue-aware preemption lead time + downstream junction preparation | next |
 
 ## Prerequisites (Windows)
 
@@ -59,6 +60,21 @@ Open **http://localhost:5173**, click **Dispatch ambulance** and drive from the 
 | Q / E | Change lane left / right. Left-hand traffic: the curb lane is on the left |
 | C | Camera: **Chase** (behind the ambulance; a city overview while none is out), **Orbit** (free: drag to rotate, right-drag to pan, wheel to zoom), **Map** (2D) |
 | F | Map view: follow the ambulance on/off (off shows the whole map) |
+
+### Suggested route
+
+Once the ambulance is on the road, the fastest route to the hospital is drawn on the road and shown in the HUD:
+- **ETA and distance** to the hospital.
+- **The next turn**, labelled at its junction.
+
+The route is planned with live costs:
+- **Traffic speed** on each road.
+- **Queues** at the stop lines.
+- **Red lights:** in OFF mode, the wait at each light is predicted from the signal program. With preemption (BASIC) the wait drops out.
+
+It is re-planned every second and every time the ambulance reaches a new road. It is advice only: you steer.
+- **Off the suggestion:** if your next turn differs, the route turns orange and the HUD says which key to press (A or D).
+- **Accuracy:** over 10 seeded autopilot runs on the 4x4 grid, the ETA at dispatch was within 10 % on average with BASIC. With normal signals (OFF) it was within 25 %, because every red light met is a lottery. Run `scripts.eta_check` (below) to reproduce this.
 
 ### The 3D city
 
@@ -150,6 +166,7 @@ Options:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.benchmark       # engine tick time + message size, 2x2/4x4 at 1.0x/1.5x (~2 min)
+.venv\Scripts\python.exe -m scripts.eta_check       # routing ETA vs measured: 10 seeds, autopilot, 4x4 (~2 min, parallel)
 .venv\Scripts\python.exe -m scripts.gen_contract    # run after ANY change to api/protocol.py, then fix state.ts until `npm run typecheck` passes
 ```
 

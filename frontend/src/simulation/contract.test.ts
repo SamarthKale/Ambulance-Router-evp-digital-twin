@@ -11,6 +11,7 @@ import type {
   Command,
   HealthMsg,
   MissionStatus,
+  Routing,
   ServerMsg,
   SessionRole,
   SignalControl,
@@ -33,7 +34,8 @@ const enumsMatch: [
   Equal<MissionStatus, Values<"missionStatus">>,
   Equal<TurnKind, Values<"turn">>,
   Equal<HealthMsg["status"], Values<"healthStatus">>,
-] = [true, true, true, true, true, true];
+  Equal<Routing, Values<"routing">>,
+] = [true, true, true, true, true, true, true];
 
 describe("protocol contract", () => {
   it("knows every backend command, server message type and enum value", () => {

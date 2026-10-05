@@ -60,8 +60,30 @@ export interface AmbulanceMsg {
   missionTime: number | null;
 }
 
+export type Routing = "dynamic" | "static";
+
+export interface RouteTurnMsg {
+  junction: string;
+  turn: TurnKind;
+  edge: string; // road taken after the junction
+}
+
+/** Suggested route to the hospital: advisory, it never steers a manually driven ambulance. */
+export interface RouteMsg {
+  edges: string[]; // from the ambulance's road (or the one after its junction) to the hospital
+  turns: RouteTurnMsg[]; // junction by junction
+  eta: number; // s, predicted, counted down between re-plans
+  distance: number; // m remaining along the route
+  follows: boolean; // the road the ambulance takes next is the suggested one
+  routing: Routing;
+  computedAt: number; // simulation time of the plan
+  drive: number; // s of the planned ETA spent driving...
+  queue: number; // ...waiting for queues to discharge...
+  signal: number; // ...and waiting at red lights
+}
+
 export interface MetricsMsg {
-  eta: number | null;
+  eta: number | null; // s to the hospital along the suggested route
   signalsPreempted: number;
   queueCleared: number | null;
   timeSaved: number | null; // only ever measured (ghost run)
@@ -91,7 +113,7 @@ export interface StateMsg {
   vehicles: VehicleMsg[];
   signals: SignalMsg[];
   ambulance: AmbulanceMsg;
-  route: null; // Sprint 6
+  route: RouteMsg | null;
   metrics: MetricsMsg;
   safety: SafetyMsg;
   incidents: string[]; // Sprint 8
