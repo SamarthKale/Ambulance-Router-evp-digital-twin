@@ -13,7 +13,8 @@ This file is the source of truth for how to work in this repo. Read it fully bef
 - **AI scope for v1: rules + shortest-path routing ONLY.**
   - Do NOT add PyTorch, scikit-learn, Stable-Baselines3, or any ML/RL code in v1.
   - Traffic prediction (LSTM/GRU/XGBoost) and RL are post-v1 and must not be scaffolded early.
-- **Out of scope for v1:** CARLA, Eclipse MOSAIC, SUMO+CARLA co-simulation, multi-city support, real hardware/IoT integration, SQLite/PostgreSQL, road-closure incidents (accidents only), Docker (after CI, if time).
+- **Out of scope for v1:** CARLA, Eclipse MOSAIC, SUMO+CARLA co-simulation, multi-city support, real hardware/IoT integration, SQLite/PostgreSQL, road-closure incidents (accidents only), Docker, CI/CD.
+- **Platform:** local, native Windows only (decided 2026-10-05). No Docker, no CI/CD pipelines. Tests, lint and the asset check run locally (section 5).
 
 ## 2. Core architecture (non-negotiable)
 
@@ -75,7 +76,7 @@ SUMO  <--TraCI-->  Python engine (FastAPI)  <--WebSocket-->  React + R3F + Three
 | 3D assets | The team's deliveries in `3d_models/` (Git LFS), served unmodified at `/models/` by a Vite plugin; `@gltf-transform` for `check:assets` (Blender only for authoring, never at runtime) |
 | Data / eval | pandas, matplotlib |
 | Testing | pytest (backend), Vitest (frontend) |
-| Packaging | GitHub Actions CI; Docker + Docker Compose later, if time |
+| Packaging | Local native Windows: a PowerShell launcher script (Sprint 10). No Docker, no CI/CD |
 | Storage | CSV + `run_manifest.json` per run in v1 (no database) |
 
 ## 4. Repository structure
@@ -161,7 +162,7 @@ npm install
 npm run dev            # open http://localhost:5173 (Vite listens on localhost/::1; it proxies /api and /ws to 127.0.0.1:8000)
                        # http://localhost:5173/assets: dev-only asset inspection page
 npm run build          # typecheck + production build (copies 3d_models/ byte for byte into dist/models/)
-npm run check:assets   # read-only model report + manifest vs workbook; -- --strict for CI
+npm run check:assets   # read-only model report + manifest vs workbook; -- --strict also fails on warnings
 ```
 
 ### SUMO sanity checks
@@ -488,7 +489,7 @@ Replies:
 - **TypeScript:** `strict` mode, no `any`, state in Zustand, components stay presentational.
 - Prefer iterative changes to the existing code over full rewrites.
 - Commit messages: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
-- **Git:** `main` holds approved work. Each sprint is built on `sprint-<n>/<name>` (e.g. `sprint-1/sumo-world`) and merged after approval. Keep PRs small and reviewable.
+- **Git:** `main` holds approved work. Each sprint is built on `sprint-<n>/<name>` (e.g. `sprint-1/sumo-world`) and merged after approval. Keep PRs small and reviewable. Sprints 6–10 were approved to run back to back (2026-10-05): each one merges into `main` once its tests pass.
 - Secrets and local paths go in `.env` (git-ignored). Commit `.env.example`.
 
 ## 13. Roadmap (v1)
@@ -504,7 +505,7 @@ Replies:
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation |
 | 8 | Accident injection + automatic reroute + "route compromised" |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run** |
-| 10 | CI, README, demo script hardening; Docker if time |
+| 10 | README, demo script hardening, one-command local launcher, final verification (local native Windows; no Docker, no CI/CD) |
 
 Post-v1 (do not start early): traffic prediction, RL, OSM real-city import, multi-emergency-vehicle coordination, trucks/buses with protected turn phases.
 

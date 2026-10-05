@@ -162,7 +162,7 @@ Options:
 ```powershell
 npm run check:assets            # every model: triangles, size before/after fit, parts, LFS pointers,
                                 # ATTRIBUTIONS rows, manifest owner/priority vs the workbook
-npm run check:assets -- --strict   # warnings fail too (CI)
+npm run check:assets -- --strict   # warnings fail too
 ```
 
 **http://localhost:5173/assets** (dev server only) shows every model on its own turntable:
