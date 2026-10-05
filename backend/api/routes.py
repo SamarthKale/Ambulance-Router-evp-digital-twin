@@ -26,9 +26,15 @@ def health(request: Request) -> HealthMsg:
         status = "running"
     else:
         status = "starting"
+    stats = engine.stats()
     return HealthMsg(
         status=status,
         error=engine.error,
         seq=latest.seq if latest else None,
         t=latest.snapshot.time if latest else None,
+        vehicles=stats.vehicles,
+        tick_ms_p50=stats.tick_ms_p50,
+        tick_ms_p95=stats.tick_ms_p95,
+        tick_ms_max=stats.tick_ms_max,
+        sumo_step_ms_p50=stats.sumo_step_ms_p50,
     )

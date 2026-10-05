@@ -1,0 +1,10 @@
+{
+  "depot": {
+    "edge": "w0_A0",
+    "pos": 0.0
+  },
+  "hospital": {
+    "edge": "D3_e3",
+    "stopBeforeEnd": 15.0
+  }
+}

@@ -333,14 +333,16 @@ function CameraRig({ network, origin }: { network: NetworkMsg; origin: Origin })
   return <MapControls ref={controls} enableRotate={false} screenSpacePanning makeDefault />;
 }
 
+/** FPS and draw calls per frame, for the HUD and the Sprint 4 performance check. */
 function FpsMeter() {
   const frames = useRef(0);
   const since = useRef(performance.now());
-  useFrame(() => {
+  useFrame(({ gl }) => {
     frames.current += 1;
     const now = performance.now();
     if (now - since.current >= 500) {
-      useSim.getState().setFps(Math.round((frames.current * 1000) / (now - since.current)));
+      const fps = Math.round((frames.current * 1000) / (now - since.current));
+      useSim.getState().setRenderStats(fps, gl.info.render.calls);
       frames.current = 0;
       since.current = now;
     }

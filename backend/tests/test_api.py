@@ -62,7 +62,7 @@ def test_health_reports_running(client: TestClient) -> None:
 
 def test_state_ticks_arrive_at_10_hz(client: TestClient) -> None:
     with client.websocket_connect("/ws") as ws:
-        first: Msg = ws.receive_json()
+        first = wait_for(ws, lambda m: m["type"] == "state")  # after the session message
         start = time.monotonic()
         ticks = [ws.receive_json() for _ in range(20)]
         elapsed = time.monotonic() - start

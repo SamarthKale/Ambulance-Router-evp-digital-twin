@@ -55,7 +55,13 @@ SUMO  <--TraCI-->  Python engine (FastAPI)  <--WebSocket-->  React + R3F + Three
    - Safety: speed mode stays at 31 (red lights and right of way respected; tested), speed is capped at 22 m/s (tested), and a deadman timer zeroes input if drive messages stop for 0.5 s (tested with an injected clock).
 7. **Single TraCI owner.** One simulation thread (`backend/simulation/engine.py`) owns the TraCI connection, because TraCI is not thread-safe.
    - WebSocket handlers only `submit()` commands, which return a future. The engine thread applies them before each step and publishes an immutable `EngineState`. The event loop serializes it once and fans it out.
-   - Each client gets every ack but only the newest tick, so a slow client skips frames instead of lagging.
+   - Each client gets every ack but only the newest tick, so a slow client skips frames instead of lagging. A (re)connecting client is sent the latest state immediately.
+8. **Driver lock** (`backend/api/session.py`, API layer, not the engine). The first client that dispatches drives; every other client is an observer.
+   - Observers receive all state but cannot drive, turn, change lanes, switch mode or reset (ack: "observer: another screen is driving"). Their drive heartbeats are dropped silently.
+   - With no driver, anyone may switch mode or reset.
+   - Control is freed by `release_control` from the driver, by a reset, or when the driver's connection stays gone for **10 s**.
+   - Each browser tab sends `hello` with a per-tab id (`sessionStorage`), so a tab that reconnects within those 10 s keeps control.
+   - The lock is in memory: a backend restart frees it.
    - If SUMO crashes, the engine records the error (`/api/health`) and restarts SUMO after 1 s (tested).
 
 ## 3. Tech stack
@@ -94,7 +100,7 @@ sparkathon26/                      (EmergencyFlow AI)
 │   │   ├── assets/                # manifest.ts (asset key -> file, fit, offsets, placeholder), Sprint 5
 │   │   ├── dashboard/             # Hud.tsx
 │   │   └── app/                   # App.tsx, app.css
-│   ├── scripts/                   # check-assets.ts (when the first real model arrives)
+│   ├── scripts/                   # check-assets.ts (Sprint 5)
 │   └── public/models/             # *.glb (Git LFS)
 ├── backend/
 │   ├── requirements.txt           # pinned
@@ -104,7 +110,8 @@ sparkathon26/                      (EmergencyFlow AI)
 │   │                              # traffic_lights.py (the only signal actuator + net.xml tables)
 │   ├── ai/                        # rules.py (BASIC); later routing.py, signal_optimizer.py, rerouting.py
 │   ├── safety/                    # controller.py, monitor.py, invariants.py (R1-R3), signal_table.py
-│   ├── scripts/                   # smoke_compare.py (OFF vs BASIC, one seed)
+│   ├── scripts/                   # smoke_compare.py (OFF vs BASIC, one seed), benchmark.py,
+│   │                              # gen_contract.py (-> frontend contract.fixtures.ts)
 │   ├── tests/                     # incl. test_architecture.py (layering guards), helpers.py
 │   └── main.py
 ├── scenarios/
@@ -135,10 +142,14 @@ cd backend
 .venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000          # API + live simulation
 .venv\Scripts\python.exe -m simulation.sumo --steps 600 --print-every 50   # headless run, prints vehicles + signals
 .venv\Scripts\python.exe -m scripts.smoke_compare                          # OFF vs BASIC on one seed (smoke only)
+.venv\Scripts\python.exe -m scripts.benchmark                              # tick time + message size, 2x2/4x4 x 1.0/1.5
+.venv\Scripts\python.exe -m scripts.gen_contract                           # after ANY change to api/protocol.py
 .venv\Scripts\python.exe ..\scenarios\build_grid.py                        # regenerate scenarios\grid2x2
 .venv\Scripts\python.exe ..\scenarios\build_grid.py --nx 4 --ny 4          # evaluation grid
 ```
-Call `.venv\Scripts\python.exe` directly instead of activating (avoids the PowerShell execution policy). The backend reads `EF_SCENARIO`, `EF_SEED` and `EF_SCALE` from `.env`.
+Call `.venv\Scripts\python.exe` directly instead of activating (avoids the PowerShell execution policy). The backend reads `EF_SCENARIO`, `EF_SEED`, `EF_SCALE` and `EF_WARMUP_S` from `.env`.
+
+**Run demos on AC power** with Edge/Chrome on the high-performance GPU (Windows Settings → Display → Graphics). On battery (Balanced plan), this laptop measured SUMO about 4x slower and Edge on the integrated GPU (see section 6).
 
 ### Frontend
 ```powershell
@@ -179,6 +190,17 @@ cd ..\frontend; npm run test; npm run typecheck
   - Signals: one subscription per signal.
   - Vehicles: one context subscription on the central junction with a radius covering the map.
   - Simulation time and SUMO's per-step collision count: one simulation subscription.
+  - The ambulance's next signal, stop state and lane position: one vehicle subscription, renewed on every spawn. The only per-tick ambulance call left is the `setSpeed` write.
+- **Warm-up:** the live server fast-forwards `EF_WARMUP_S` (default 120 s) of simulated time on start and after Reset, so the demo opens with traffic flowing. Experiments and tests use 0.
+- **Performance (Sprint 4, `scripts/benchmark.py`; BASIC mode with the ambulance driving).** `/api/health` reports live tick p50/p95/max.
+
+  | Scenario and demand | Vehicles | Tick p50/p95, plugged in | Tick p50, on battery | State message raw → deflated |
+  |---|---|---|---|---|
+  | 2x2 at 1.0x | ~80 | 1.9 / 3.2 ms | 5.4 ms | 10 → 1.9 KB |
+  | 4x4 at 1.5x | ~480 | 7.8 / 11.4 ms | ~30 ms (p95 50 ms with the browser running) | 54 → 8 KB |
+
+  - The budget is 100 ms (10 Hz). SUMO's own step is about 98% of the tick and JSON serialisation adds 1.3 ms, so the backend needs no optimisation.
+  - The 4x4 grid at 1.5x runs 1 h with 0 teleports and 0 collisions.
   - SUMO reports a vehicle's front-bumper position; `sumo.py` converts it to the vehicle **centre** before anything else sees it.
 - **Traffic side:** left-hand traffic (India), via `netconvert --lefthand`. Lane 0 is the curb (left) lane and carries left + straight; lane 1 carries straight + right. The right turn crosses oncoming traffic and is permissive (`g`).
 - **Network (`scenarios/build_grid.py`):**
@@ -236,7 +258,12 @@ Never bypass or weaken these checks to make a demo work. Never describe the syst
 
 Every message carries `"v": 1`. The source of truth is `backend/api/protocol.py` (pydantic, camelCase JSON) mirrored by `frontend/src/simulation/state.ts`. Any change must update both in the same commit; a breaking change bumps the version. Fields marked "(Sprint N)" are sent as `null`/`0`/`[]` until that sprint.
 
-Static network, fetched once via `GET /api/network`. The frontend generates roads, signal lamps and markers from it. Coordinates are SUMO metres. `GET /api/health` returns `{status: starting|running|error, error, seq, t}`.
+**Contract test (Sprint 4).**
+- `backend/scripts/gen_contract.py` serialises example messages through the pydantic models into `frontend/src/simulation/contract.fixtures.ts`. Each fixture `satisfies` its `state.ts` type, alongside the exact lists of command names, server message types and enum values.
+- When the two sides drift, tsc fails on a missing, extra or mistyped field or on a one-sided enum value or command, and `tests/test_contract.py` fails on stale fixtures. All three kinds of drift were verified to fail.
+- After changing `protocol.py`: run `scripts.gen_contract`, then fix `state.ts` until `npm run typecheck` passes.
+
+Static network, fetched once via `GET /api/network` (and again on every reconnect: a restarted backend may run another scenario). The frontend generates roads, signal lamps and markers from it. Coordinates are SUMO metres. `GET /api/health` returns `{status: starting|running|error, error, seq, t, vehicles, tickMsP50, tickMsP95, tickMsMax, sumoStepMsP50}`.
 ```json
 {
   "v": 1, "lefthand": true, "bounds": [0, 0, 650, 650],
@@ -279,9 +306,11 @@ Field notes:
 - **`metrics`:** `signalsPreempted` counts preemptions that reached green. `timeSaved` stays `null` unless it was measured against the ghost run (section 14).
 - **`mode`:** `OFF` or `BASIC`. `COORD` is rejected until Sprint 7.
 
-Frontend → backend (commands). Every command except `drive` carries an `id` and gets an ack once the engine has run it:
+Frontend → backend (commands). Every command except `drive` and `hello` carries an `id` and gets an ack once it has run. Driving commands, `set_mode` and `reset` are subject to the driver lock (section 2.8):
 ```json
-{"v": 1, "id": 1, "cmd": "spawn_ambulance"}                                                  // dispatch (respawns if on the road)
+{"v": 1, "cmd": "hello", "clientId": "tab-<uuid>"}                                           // first on every (re)connect; reply: session
+{"v": 1, "id": 7, "cmd": "release_control"}                                                  // driver hands over control
+{"v": 1, "id": 1, "cmd": "spawn_ambulance"}                                                  // dispatch (respawns if on the road); claims control
 {"v": 1, "cmd": "drive", "vehicle": "ambulance_01", "control": {"throttle": 1, "brake": 0}}   // on change + 10 Hz heartbeat, no ack
 {"v": 1, "id": 3, "cmd": "turn", "vehicle": "ambulance_01", "direction": "left|right"}     // intent for the next junction
 {"v": 1, "id": 4, "cmd": "lane", "vehicle": "ambulance_01", "direction": "left|right"}
@@ -293,6 +322,7 @@ Frontend → backend (commands). Every command except `drive` carries an `id` an
 {"v": 1, "type": "ack", "id": 3, "ok": false, "reason": "too late to turn right at A0: needs the inner lane, only 4 m left"}
 {"v": 1, "type": "ack", "id": 4, "ok": true, "reason": "waiting for a gap in the curb lane"}
 {"v": 1, "type": "error", "reason": "message is not valid JSON"}
+{"v": 1, "type": "session", "clientId": "tab-<uuid>", "role": "driver|observer|free"}       // on connect, hello and every driver change
 ```
 Replies:
 - **Invalid commands with an `id`:** get `ok: false` with a reason.
@@ -357,7 +387,13 @@ Replies:
 - **Draco/Meshopt decoders:** self-host them in `public/`, never from a CDN (venue Wi-Fi).
 - **Dev-only `/assets` page:** every asset on a grid with axes, a 1 m grid, a 5 m ruler, bounding-box size, triangle count, load status (loaded / placeholder / error / missing parts) and a "copy manifest entry" button.
 - **`npm run check:assets`** (gltf-transform): for each `.glb`, reports triangles vs budget, bounding box in meters, a forward-axis guess (sign unconfirmed), node names, missing required parts, file size and a missing `ATTRIBUTIONS.md` row. It warns by default; `--strict` is for CI.
-- **Instancing:** use instancing (drei `<Instances>`/`<Merged>`) for background cars once counts exceed ~100.
+- **Rendering decisions measured in Sprint 4** (Edge, integrated GPU on battery, the worst realistic demo machine):
+  - **Vehicles:** with one mesh per vehicle the 4x4 scene at 1.5x (~490 vehicles) issued **~957 draw calls**. The overview averaged 96 FPS but **dipped to 21 FPS**; following the ambulance gave 40-55 FPS. **Sprint 5 instances background vehicles** (one `InstancedMesh` per model part, or drei `<Instances>`/`<Merged>`) and the signal lamps.
+  - **Multi-node buildings:** `model.glb` is 688 draw calls on its own and the gas station 361. Their meshes are merged per material at load time in the app layer; the files stay untouched.
+  - **Heavy files:**
+    - The `.exr` skybox takes **16.4 s** to load and decode (4096x2048). Load it after the scene is interactive and use a plain sky until then.
+    - The bus stop takes 0.6 s plus a 0.6 s first frame, and the crashed car 0.6 s plus 0.3 s. Both load lazily.
+  - **Everything else** loads and uploads in under 0.35 s each. All 10 heavy or priority models together render at 90 FPS (1084 draw calls before merging).
 
 ## 12. Code conventions
 
@@ -377,8 +413,8 @@ Replies:
 | 1 | SUMO world: 2x2 signalized grid (left-hand traffic), seeded background traffic, clean TraCI lifecycle, tests ✅ |
 | 2 | Ambulance vType + manual WASD control (reference demos reworked) + FastAPI WebSocket + React Three Fiber top-down view; input latency measured ✅ |
 | 3 | Safety controller + independent monitor (tests first), BASIC preemption with clearance and recovery, OFF/BASIC mode in protocol + UI, 24 h live traffic ✅ |
-| 4 | Full WebSocket protocol v1: `/api/network`, versioned messages, command acks, subscriptions for all per-step reads |
-| 5 | 3D scene with placeholders: roads from the network, vehicles, per-approach signal heads, hospital, chase camera; asset manifest + fallback; `coords.ts` |
+| 4 | Demo hardening: protocol contract test, driver lock, reconnect handling, ambulance subscription, 4x4 grid + performance benchmark, live warm-up ✅ |
+| 5 | 3D scene with the delivered models: asset manifest (fit/pivot/aliases, placeholder fallback), instanced vehicles and lamps, merged multi-node buildings, lazy skybox, per-approach signal heads, hospital, chase camera, HUD placement, `/assets` page and `check:assets` |
 | 6 | Shortest-path routing with live costs + route overlay + ETA |
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation |
 | 8 | Accident injection + automatic reroute + "route compromised" |
@@ -416,6 +452,7 @@ Run seeded batch headless simulations comparing arms, typically on a 4x4 grid; t
 
 ## 15. Demo script
 
+0. Laptop on AC power, browser on the high-performance GPU, backend started with `EF_SCALE=1.5` (traffic is already flowing thanks to the warm-up). A second screen may open the page as an observer.
 1. Heavy traffic (`--scale 1.5`), ambulance parked, mode OFF.
 2. Press **Start Emergency**: show normal-signal delay; the OFF ghost appears.
 3. Switch to BASIC: the signal turns green on approach after yellow + all-red clearance.

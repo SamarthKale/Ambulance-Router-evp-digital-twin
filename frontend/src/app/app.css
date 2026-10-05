@@ -192,6 +192,29 @@ button:disabled {
   color: #fca5a5;
 }
 
+.role {
+  padding: 4px 8px;
+  border-radius: 6px;
+  justify-content: space-between;
+}
+
+.role.driver {
+  background: rgba(22, 101, 52, 0.4);
+}
+
+.role.observer {
+  background: rgba(30, 58, 138, 0.5);
+}
+
+.role.free {
+  border: 1px dashed var(--line);
+}
+
+.small-button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
 .banner {
   position: absolute;
   bottom: 12px;

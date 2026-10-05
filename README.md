@@ -14,7 +14,8 @@ See [CLAUDE.md](CLAUDE.md) for architecture, conventions and roadmap.
 | 1 | SUMO world: 2x2 signalized grid (left-hand traffic), seeded background traffic, clean TraCI lifecycle | done |
 | 2 | Ambulance + manual WASD driving, FastAPI WebSocket, React Three Fiber top-down view | done |
 | 3 | Safety controller + independent safety monitor + BASIC signal preemption (OFF/BASIC) | done |
-| 4 | Protocol hardening (per the roadmap in CLAUDE.md) | next |
+| 4 | Demo hardening: protocol contract test, driver lock, reconnect, 4x4 grid + performance benchmark | done |
+| 5 | 3D scene with the delivered models (instanced traffic, asset manifest) | next |
 
 ## Prerequisites (Windows)
 
@@ -79,10 +80,28 @@ The HUD's **Safety** card shows the independent monitor's violation count, SUMO'
 
 This is a simulation: nothing here controls real traffic signals.
 
-Measured on this machine (Edge, RTX 4060 laptop):
-- 240 FPS.
-- 28–57 ms median from keypress to the first simulation tick that responds.
-- 100 ms median tick interval.
+### Several screens
+
+The first screen that clicks **Dispatch** drives. Every other screen is an observer: it sees everything live, but its controls are disabled.
+- **Handing over:** the driver can click **Release control**, and **Reset** also frees control.
+- **Reconnects:** if the driver's tab loses its connection, it gets control back when it reconnects within 10 s. Any page reconnects on its own after a backend restart, and reloads the map if the scenario changed.
+
+### Demo settings
+
+- **Warm-up:** the backend fast-forwards 120 s on start and after Reset, so traffic is already flowing (`EF_WARMUP_S` in `.env`).
+- **Heavy traffic:** `EF_SCALE=1.5`.
+- **Bigger city:** `EF_SCENARIO=grid4x4` for the 16-junction grid.
+
+**Plug the laptop in for demos.** Measured on this laptop:
+
+| | Plugged in (RTX 4060) | On battery (Intel UHD) |
+|---|---|---|
+| 2x2 top-down view | 240 FPS | 144 FPS |
+| 4x4 at 1.5x (~490 vehicles) | not measured | 96 FPS median, 21 FPS dips |
+| Backend tick (2x2) | 1.9 ms | 5.4 ms |
+| Backend tick (4x4 at 1.5x) | 7.8 ms | ~30 ms |
+
+Instancing the vehicles in Sprint 5 removes the 4x4 FPS dips. Keypress to the first responding simulation tick takes 28–57 ms median.
 
 ## Headless run
 
@@ -109,6 +128,15 @@ Options:
 - `--steps N`: number of 0.1 s steps.
 - `--gui`: `sumo-gui`, for debugging only. It is not the product UI.
 
+## Developer tools (from `backend\`)
+
+```powershell
+.venv\Scripts\python.exe -m scripts.benchmark       # engine tick time + message size, 2x2/4x4 at 1.0x/1.5x (~2 min)
+.venv\Scripts\python.exe -m scripts.gen_contract    # run after ANY change to api/protocol.py, then fix state.ts until `npm run typecheck` passes
+```
+
+`gen_contract` regenerates `frontend/src/simulation/contract.fixtures.ts` from the backend's message models. If the frontend types drift from the backend, TypeScript and `pytest` both fail.
+
 ## OFF vs BASIC smoke comparison (one seed)
 
 ```powershell
@@ -130,8 +158,8 @@ This is **one seed**: a smoke test, not evidence. The seeded multi-run evaluatio
 
 ```powershell
 cd backend
-.venv\Scripts\python.exe -m pytest -q                  # ~65 s, includes a 1-hour heavy-traffic run
-.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~50 s
+.venv\Scripts\python.exe -m pytest -q                  # ~70 s plugged in (~2.5 min on battery); includes a 1-hour run
+.venv\Scripts\python.exe -m pytest -q -m "not slow"    # ~55 s plugged in
 .venv\Scripts\ruff.exe check --config pyproject.toml . ..\scenarios
 .venv\Scripts\black.exe --config pyproject.toml --check . ..\scenarios
 
