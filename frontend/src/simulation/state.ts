@@ -215,6 +215,7 @@ export interface ResultSafetyMsg {
   collisions: number;
   emergencyBrakings: number;
   teleports: number;
+  ambulanceCollisions: number | null; // collision events naming the ambulance; null: not checked
 }
 
 export interface ResultArmMsg {
@@ -248,6 +249,7 @@ export interface ResultsMsg {
   note: string;
   baseline: string;
   experiments: ResultExperimentMsg[];
+  charts: string[]; // PNG charts, served at /api/charts/<name>
 }
 
 // ---- GET /api/network ------------------------------------------------------------

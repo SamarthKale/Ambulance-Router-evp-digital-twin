@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SimSocket, parseServerMsg } from "./websocket";
+import { SimSocket, parseServerMsg, randomId } from "./websocket";
 
 class FakeWebSocket {
   static readonly OPEN = 1;
@@ -52,6 +52,20 @@ describe("SimSocket", () => {
     sim.close();
     vi.advanceTimersByTime(5000);
     expect(FakeWebSocket.created).toHaveLength(2);
+  });
+});
+
+describe("randomId", () => {
+  it("works without crypto.randomUUID (pages opened from another PC are not a secure context)", () => {
+    const original = crypto.randomUUID;
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+    try {
+      const a = randomId();
+      expect(a).toMatch(/^[0-9a-f]{32}$/);
+      expect(randomId()).not.toBe(a);
+    } finally {
+      Object.defineProperty(crypto, "randomUUID", { value: original, configurable: true });
+    }
   });
 });
 

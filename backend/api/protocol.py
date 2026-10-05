@@ -530,6 +530,8 @@ class ResultSafetyMsg(Message):
     collisions: int
     emergency_brakings: int
     teleports: int
+    # collision events naming the ambulance (scripts.classify_collisions); null: not checked
+    ambulance_collisions: int | None = None
 
 
 class ResultArmMsg(Message):
@@ -565,6 +567,7 @@ class ResultsMsg(Message):
     note: str = ""
     baseline: str = ""
     experiments: list[ResultExperimentMsg] = []
+    charts: list[str] = []  # PNG charts, served at /api/charts/<name>
 
 
 class HealthMsg(Message):

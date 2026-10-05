@@ -199,7 +199,12 @@ _TIME = re.compile(r"time=(\d+(?:\.\d+)?)")
 
 def parse_log(path: Path, since: float) -> dict[str, int]:
     """Warnings SUMO logged from `since` on: teleports flag a bad run (data quality)."""
-    counts = {"teleports": 0, "emergency_brakings": 0, "sumo_collision_warnings": 0}
+    counts = {
+        "teleports": 0,
+        "emergency_brakings": 0,
+        "sumo_collision_warnings": 0,
+        "ambulance_collisions": 0,  # collision warnings naming the ambulance
+    }
     if not path.exists():
         return counts
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -212,4 +217,6 @@ def parse_log(path: Path, since: float) -> dict[str, int]:
             counts["emergency_brakings"] += 1
         elif "collision" in line:
             counts["sumo_collision_warnings"] += 1
+            if f"'{AMBULANCE_ID}'" in line:
+                counts["ambulance_collisions"] += 1
     return counts

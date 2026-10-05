@@ -6,8 +6,9 @@ headless SUMO processes, then paired statistics and charts under experiments/.
     .venv\\Scripts\\python.exe -m scripts.run_experiments --report-only
 
 Runs already in experiments/<arm>/runs.csv are skipped (pass --rerun to repeat them).
---ci-target S keeps adding seeds (in batches) until every arm's 95 % CI of the mean travel
-time difference against the baseline is at most +-S seconds wide, or --max-seeds is reached.
+--error-bar S keeps adding seeds (in batches) until every arm's error bar, the half-width of the
+95 % confidence interval of its mean travel time difference against the baseline, is at most
++-S seconds, or --max-seeds is reached.
 """
 
 from __future__ import annotations
@@ -88,7 +89,7 @@ def run_batch(specs: list[RunSpec], workers: int, out: Path, raw: Path | None) -
     return failures
 
 
-def widest_ci(out: Path, scenario: str, scales: list[float]) -> float:
+def widest_error_bar(out: Path, scenario: str, scales: list[float]) -> float:
     runs = load_runs(out)
     runs = runs[(runs["scenario"] == scenario) & (runs["scale"].isin(scales))]
     table = paired_table(runs)
@@ -111,9 +112,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=OUT)
     parser.add_argument("--keep-raw", action="store_true", help="keep SUMO logs + tripinfo")
     parser.add_argument("--rerun", action="store_true", help="repeat runs already recorded")
-    parser.add_argument("--ci-target", type=float, default=None, help="s, CI half-width goal")
+    parser.add_argument(
+        "--error-bar",
+        type=float,
+        default=None,
+        help="s: add seeds until every confidence interval half-width is at most this",
+    )
     parser.add_argument("--max-seeds", type=int, default=40)
-    parser.add_argument("--batch", type=int, default=5, help="seeds added per CI round")
+    parser.add_argument("--batch", type=int, default=5, help="seeds added per round")
     parser.add_argument(
         "--program",
         choices=("tuned", "net"),
@@ -149,12 +155,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{failures} runs failed; see above", file=sys.stderr)
             if specs and failures == len(specs):
                 return 1  # nothing worked: adding seeds won't help
-            if args.ci_target is None:
+            if args.error_bar is None:
                 break
-            width = widest_ci(out, args.scenario, scales)
-            print(f"widest 95 % CI half-width of travel time vs baseline: {width:.1f} s "
-                  f"(target {args.ci_target:g} s, {len(seeds)} seeds)", flush=True)  # fmt: skip
-            if width <= args.ci_target or len(seeds) >= args.max_seeds:
+            width = widest_error_bar(out, args.scenario, scales)
+            print(f"widest travel-time error bar vs baseline (95 % confidence interval): "
+                  f"+-{width:.1f} s (target +-{args.error_bar:g} s, {len(seeds)} seeds)",
+                  flush=True)  # fmt: skip
+            if width <= args.error_bar or len(seeds) >= args.max_seeds:
                 break
             seeds = seeds + list(range(max(seeds) + 1, max(seeds) + 1 + args.batch))
             args.rerun = False

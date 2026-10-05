@@ -35,7 +35,7 @@ export async function fetchResults(): Promise<ResultsMsg> {
  * sessionStorage: survives reloads and reconnects, but two tabs are two clients.
  */
 export function tabClientId(): string {
-  const fresh = `tab-${crypto.randomUUID()}`;
+  const fresh = `tab-${randomId()}`;
   try {
     const stored = sessionStorage.getItem(CLIENT_ID_KEY);
     if (stored) return stored;
@@ -44,6 +44,15 @@ export function tabClientId(): string {
     // storage blocked (private mode, sandbox): the id lasts for this page only
   }
   return fresh;
+}
+
+/**
+ * 32 random hex digits. crypto.randomUUID exists only in secure contexts (https, localhost),
+ * so a page opened from another PC (http://<LAN IP>) uses getRandomValues, available everywhere.
+ */
+export function randomId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 const SERVER_TYPES: ReadonlySet<string> = new Set(["state", "ack", "error", "session"]);

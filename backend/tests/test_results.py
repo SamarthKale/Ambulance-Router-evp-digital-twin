@@ -59,6 +59,12 @@ def test_the_report_summary_is_served_in_camel_case(client: TestClient, tmp_path
 
     body = client.get("/api/results").json()
     assert body["available"] is True and body["baseline"] == BASELINE.id
+    assert "travel_time_grid4x4_x1.5.png" in body["charts"]
+    png = client.get("/api/charts/travel_time_grid4x4_x1.5.png")
+    assert png.status_code == 200 and png.headers["content-type"] == "image/png"
+    assert png.content[1:4] == b"PNG"  # the PNG signature
+    assert client.get("/api/charts/..%2Fsummary.json").status_code == 404  # names only
+    assert client.get("/api/charts/summary.json").status_code == 404
     (experiment,) = body["experiments"]
     assert experiment["pairingOk"] and experiment["signalProgram"] == "tuned"
     assert experiment["cycleS"] == 35.0 and experiment["seeds"] == [1, 2, 3, 4, 5]
@@ -71,7 +77,26 @@ def test_the_report_summary_is_served_in_camel_case(client: TestClient, tmp_path
     assert by_arm["basic_dynamic"]["bgDelayVsBaseline"]["meanDiff"] == pytest.approx(-830.0)
     assert by_arm["basic_dynamic"]["safety"] == {
         "violations": 0, "collisions": 0, "emergencyBrakings": 0, "teleports": 0,
+        "ambulanceCollisions": None,  # not classified yet
     }  # fmt: skip
+
+    # after scripts.classify_collisions: events naming the ambulance, summed per arm
+    (tmp_path / "experiments" / "summary" / "collisions.csv").write_text(
+        "\n".join(
+            [
+                "scenario,scale,seed,arm,collisions,events,ambulance_events",
+                "grid4x4,1.5,2,basic_dynamic,2,1,0",
+                "grid4x4,1.5,3,off_strict_static,4,2,1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    write_report(tmp_path / "experiments")
+    arms = client.get("/api/results").json()["experiments"][0]["arms"]
+    assert {a["arm"]: a["safety"]["ambulanceCollisions"] for a in arms} == {
+        BASELINE.id: 1,
+        "basic_dynamic": 0,
+    }
 
 
 def test_an_unreadable_summary_is_reported_not_raised(client: TestClient, tmp_path: Path) -> None:
