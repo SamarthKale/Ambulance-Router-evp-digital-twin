@@ -1,0 +1,1305 @@
+{
+  "generated_at": "2026-10-05T19:54:18+00:00",
+  "note": "Autopilot batch runs (the live demo is driven manually). Rule-based, simulated.",
+  "baseline": "off_strict_static",
+  "experiments": [
+    {
+      "scenario": "grid4x4",
+      "scale": 0.75,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "pairing_ok": true,
+      "signal_program": "tuned",
+      "cycle_s": 27.9,
+      "arms": [
+        {
+          "arm": "off_strict_static",
+          "label": "OFF strict \u00b7 static",
+          "signals": "off_strict",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 133.78,
+          "travel_ci": [
+            113.91,
+            155.95
+          ],
+          "wait_mean": 25.62,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 2,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": null,
+          "bg_delay_vs_baseline": null
+        },
+        {
+          "arm": "off_strict_dynamic",
+          "label": "OFF strict \u00b7 dynamic",
+          "signals": "off_strict",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 123.92,
+          "travel_ci": [
+            104.29,
+            146.21
+          ],
+          "wait_mean": 20.04,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -9.86,
+            "ci": [
+              -24.34,
+              4.71
+            ],
+            "p": 0.219
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 285.27,
+            "ci": [
+              25.39,
+              540.74
+            ],
+            "p": 0.0781
+          }
+        },
+        {
+          "arm": "off_realistic_static",
+          "label": "OFF realistic \u00b7 static",
+          "signals": "off_realistic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 116.32,
+          "travel_ci": [
+            97.94,
+            135.61
+          ],
+          "wait_mean": 6.22,
+          "safety": {
+            "violations": 0,
+            "collisions": 2,
+            "emergency_brakings": 0,
+            "teleports": 0,
+            "ambulance_collisions": 1
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -17.46,
+            "ci": [
+              -27.04,
+              -8.1
+            ],
+            "p": 0.0312
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 167.55,
+            "ci": [
+              -58.43,
+              399.81
+            ],
+            "p": 0.195
+          }
+        },
+        {
+          "arm": "off_realistic_dynamic",
+          "label": "OFF realistic \u00b7 dynamic",
+          "signals": "off_realistic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 110.26,
+          "travel_ci": [
+            93.86,
+            126.13
+          ],
+          "wait_mean": 5.83,
+          "safety": {
+            "violations": 0,
+            "collisions": 4,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 2
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -23.52,
+            "ci": [
+              -38.17,
+              -8.96
+            ],
+            "p": 0.0273
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 142.33,
+            "ci": [
+              -59.07,
+              347.83
+            ],
+            "p": 0.301
+          }
+        },
+        {
+          "arm": "basic_static",
+          "label": "BASIC \u00b7 static",
+          "signals": "basic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 89.69,
+          "travel_ci": [
+            79.66,
+            98.72
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -44.09,
+            "ci": [
+              -59.43,
+              -30.74
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -340.98,
+            "ci": [
+              -874.89,
+              228.11
+            ],
+            "p": 0.275
+          }
+        },
+        {
+          "arm": "basic_dynamic",
+          "label": "BASIC \u00b7 dynamic",
+          "signals": "basic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 84.29,
+          "travel_ci": [
+            76.77,
+            90.97
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -49.49,
+            "ci": [
+              -68.28,
+              -33.3
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -177.75,
+            "ci": [
+              -662.13,
+              309.26
+            ],
+            "p": 0.557
+          }
+        },
+        {
+          "arm": "coord_static",
+          "label": "COORD \u00b7 static",
+          "signals": "coord",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 89.36,
+          "travel_ci": [
+            77.77,
+            99.86
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 0,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -44.42,
+            "ci": [
+              -60.52,
+              -30.34
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -300.3,
+            "ci": [
+              -706.22,
+              104.6
+            ],
+            "p": 0.193
+          }
+        },
+        {
+          "arm": "coord_dynamic",
+          "label": "COORD \u00b7 dynamic",
+          "signals": "coord",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 83.55,
+          "travel_ci": [
+            74.15,
+            92.5
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 0,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -50.23,
+            "ci": [
+              -69.03,
+              -33.89
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -367.12,
+            "ci": [
+              -806.01,
+              44.52
+            ],
+            "p": 0.16
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "grid4x4",
+      "scale": 1.0,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "pairing_ok": true,
+      "signal_program": "tuned",
+      "cycle_s": 29.8,
+      "arms": [
+        {
+          "arm": "off_strict_static",
+          "label": "OFF strict \u00b7 static",
+          "signals": "off_strict",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 153.57,
+          "travel_ci": [
+            123.43,
+            184.13
+          ],
+          "wait_mean": 39.06,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": null,
+          "bg_delay_vs_baseline": null
+        },
+        {
+          "arm": "off_strict_dynamic",
+          "label": "OFF strict \u00b7 dynamic",
+          "signals": "off_strict",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 161.05,
+          "travel_ci": [
+            135.19,
+            188.99
+          ],
+          "wait_mean": 40.79,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 2,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": 7.48,
+            "ci": [
+              -7.16,
+              22.86
+            ],
+            "p": 0.562
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -42.67,
+            "ci": [
+              -507.95,
+              372.79
+            ],
+            "p": 1.0
+          }
+        },
+        {
+          "arm": "off_realistic_static",
+          "label": "OFF realistic \u00b7 static",
+          "signals": "off_realistic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 130.81,
+          "travel_ci": [
+            109.28,
+            151.84
+          ],
+          "wait_mean": 15.51,
+          "safety": {
+            "violations": 0,
+            "collisions": 2,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 1
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -22.76,
+            "ci": [
+              -34.53,
+              -11.84
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 618.32,
+            "ci": [
+              26.63,
+              1172.4
+            ],
+            "p": 0.084
+          }
+        },
+        {
+          "arm": "off_realistic_dynamic",
+          "label": "OFF realistic \u00b7 dynamic",
+          "signals": "off_realistic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 142.14,
+          "travel_ci": [
+            114.37,
+            168.79
+          ],
+          "wait_mean": 18.68,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 4,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -11.43,
+            "ci": [
+              -29.27,
+              9.34
+            ],
+            "p": 0.275
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 533.71,
+            "ci": [
+              180.23,
+              896.74
+            ],
+            "p": 0.0137
+          }
+        },
+        {
+          "arm": "basic_static",
+          "label": "BASIC \u00b7 static",
+          "signals": "basic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 93.25,
+          "travel_ci": [
+            80.53,
+            104.92
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 1,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -60.32,
+            "ci": [
+              -88.15,
+              -37.68
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -49.78,
+            "ci": [
+              -972.34,
+              784.53
+            ],
+            "p": 1.0
+          }
+        },
+        {
+          "arm": "basic_dynamic",
+          "label": "BASIC \u00b7 dynamic",
+          "signals": "basic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 91.45,
+          "travel_ci": [
+            79.57,
+            102.32
+          ],
+          "wait_mean": 0.34,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 2,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -62.12,
+            "ci": [
+              -85.68,
+              -40.75
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -542.59,
+            "ci": [
+              -1766.14,
+              635.99
+            ],
+            "p": 0.432
+          }
+        },
+        {
+          "arm": "coord_static",
+          "label": "COORD \u00b7 static",
+          "signals": "coord",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 93.71,
+          "travel_ci": [
+            80.88,
+            105.74
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 4,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -59.86,
+            "ci": [
+              -86.9,
+              -37.84
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -81.22,
+            "ci": [
+              -869.51,
+              819.05
+            ],
+            "p": 0.557
+          }
+        },
+        {
+          "arm": "coord_dynamic",
+          "label": "COORD \u00b7 dynamic",
+          "signals": "coord",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 91.3,
+          "travel_ci": [
+            79.62,
+            102.2
+          ],
+          "wait_mean": 0.15,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 5,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -62.27,
+            "ci": [
+              -86.56,
+              -40.32
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -529.68,
+            "ci": [
+              -1530.46,
+              313.12
+            ],
+            "p": 0.492
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "grid4x4",
+      "scale": 1.5,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40
+      ],
+      "pairing_ok": true,
+      "signal_program": "tuned",
+      "cycle_s": 34.7,
+      "arms": [
+        {
+          "arm": "off_strict_static",
+          "label": "OFF strict \u00b7 static",
+          "signals": "off_strict",
+          "routing": "static",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 197.1,
+          "travel_ci": [
+            177.8,
+            217.6
+          ],
+          "wait_mean": 56.47,
+          "safety": {
+            "violations": 0,
+            "collisions": 2,
+            "emergency_brakings": 27,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": null,
+          "bg_delay_vs_baseline": null
+        },
+        {
+          "arm": "off_strict_dynamic",
+          "label": "OFF strict \u00b7 dynamic",
+          "signals": "off_strict",
+          "routing": "dynamic",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 195.55,
+          "travel_ci": [
+            171.54,
+            222.29
+          ],
+          "wait_mean": 62.02,
+          "safety": {
+            "violations": 0,
+            "collisions": 2,
+            "emergency_brakings": 24,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -1.55,
+            "ci": [
+              -23.27,
+              19.36
+            ],
+            "p": 0.991
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": 10.99,
+            "ci": [
+              -477.6,
+              469.03
+            ],
+            "p": 0.977
+          }
+        },
+        {
+          "arm": "off_realistic_static",
+          "label": "OFF realistic \u00b7 static",
+          "signals": "off_realistic",
+          "routing": "static",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 170.56,
+          "travel_ci": [
+            152.75,
+            189.62
+          ],
+          "wait_mean": 32.34,
+          "safety": {
+            "violations": 0,
+            "collisions": 26,
+            "emergency_brakings": 24,
+            "teleports": 0,
+            "ambulance_collisions": 9
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -26.54,
+            "ci": [
+              -37.52,
+              -16.74
+            ],
+            "p": 3.42e-07
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": -88.81,
+            "ci": [
+              -441.61,
+              300.04
+            ],
+            "p": 0.379
+          }
+        },
+        {
+          "arm": "off_realistic_dynamic",
+          "label": "OFF realistic \u00b7 dynamic",
+          "signals": "off_realistic",
+          "routing": "dynamic",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 164.2,
+          "travel_ci": [
+            144.36,
+            185.97
+          ],
+          "wait_mean": 32.12,
+          "safety": {
+            "violations": 0,
+            "collisions": 16,
+            "emergency_brakings": 20,
+            "teleports": 0,
+            "ambulance_collisions": 6
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -32.91,
+            "ci": [
+              -54.53,
+              -13.15
+            ],
+            "p": 0.00234
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": -59.95,
+            "ci": [
+              -571.66,
+              432.19
+            ],
+            "p": 0.994
+          }
+        },
+        {
+          "arm": "basic_static",
+          "label": "BASIC \u00b7 static",
+          "signals": "basic",
+          "routing": "static",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 93.84,
+          "travel_ci": [
+            88.62,
+            99.01
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 22,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -103.27,
+            "ci": [
+              -121.95,
+              -85.94
+            ],
+            "p": 2e-12
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": 60.33,
+            "ci": [
+              -1063.85,
+              1024.14
+            ],
+            "p": 0.327
+          }
+        },
+        {
+          "arm": "basic_dynamic",
+          "label": "BASIC \u00b7 dynamic",
+          "signals": "basic",
+          "routing": "dynamic",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 95.91,
+          "travel_ci": [
+            90.5,
+            101.24
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 21,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -101.2,
+            "ci": [
+              -119.88,
+              -83.73
+            ],
+            "p": 2e-12
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": 329.76,
+            "ci": [
+              -955.23,
+              1533.86
+            ],
+            "p": 0.227
+          }
+        },
+        {
+          "arm": "coord_static",
+          "label": "COORD \u00b7 static",
+          "signals": "coord",
+          "routing": "static",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 94.6,
+          "travel_ci": [
+            89.29,
+            99.9
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 22,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -102.5,
+            "ci": [
+              -121.2,
+              -85.29
+            ],
+            "p": 2e-12
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": -183.54,
+            "ci": [
+              -1239.73,
+              804.95
+            ],
+            "p": 0.91
+          }
+        },
+        {
+          "arm": "coord_dynamic",
+          "label": "COORD \u00b7 dynamic",
+          "signals": "coord",
+          "routing": "dynamic",
+          "runs": 40,
+          "valid": 40,
+          "travel_mean": 97.28,
+          "travel_ci": [
+            91.09,
+            103.73
+          ],
+          "wait_mean": 0.44,
+          "safety": {
+            "violations": 0,
+            "collisions": 0,
+            "emergency_brakings": 16,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 40,
+            "mean_diff": -99.83,
+            "ci": [
+              -118.12,
+              -82.74
+            ],
+            "p": 2e-12
+          },
+          "bg_delay_vs_baseline": {
+            "n": 40,
+            "mean_diff": 681.04,
+            "ci": [
+              -505.66,
+              1820.83
+            ],
+            "p": 0.17
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "grid4x4",
+      "scale": 2.0,
+      "seeds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "pairing_ok": true,
+      "signal_program": "tuned",
+      "cycle_s": 36.2,
+      "arms": [
+        {
+          "arm": "off_strict_static",
+          "label": "OFF strict \u00b7 static",
+          "signals": "off_strict",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 212.38,
+          "travel_ci": [
+            147.38,
+            296.22
+          ],
+          "wait_mean": 56.35,
+          "safety": {
+            "violations": 0,
+            "collisions": 16,
+            "emergency_brakings": 10,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": null,
+          "bg_delay_vs_baseline": null
+        },
+        {
+          "arm": "off_strict_dynamic",
+          "label": "OFF strict \u00b7 dynamic",
+          "signals": "off_strict",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 179.72,
+          "travel_ci": [
+            140.22,
+            221.68
+          ],
+          "wait_mean": 44.55,
+          "safety": {
+            "violations": 0,
+            "collisions": 6,
+            "emergency_brakings": 9,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -32.66,
+            "ci": [
+              -109.05,
+              14.23
+            ],
+            "p": 1.0
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -2235.84,
+            "ci": [
+              -4446.74,
+              -162.35
+            ],
+            "p": 0.125
+          }
+        },
+        {
+          "arm": "off_realistic_static",
+          "label": "OFF realistic \u00b7 static",
+          "signals": "off_realistic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 9,
+          "travel_mean": 143.36,
+          "travel_ci": [
+            120.6,
+            169.24
+          ],
+          "wait_mean": 19.89,
+          "safety": {
+            "violations": 0,
+            "collisions": 8,
+            "emergency_brakings": 7,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 9,
+            "mean_diff": -34.37,
+            "ci": [
+              -73.21,
+              -6.59
+            ],
+            "p": 0.0625
+          },
+          "bg_delay_vs_baseline": {
+            "n": 9,
+            "mean_diff": -1242.37,
+            "ci": [
+              -2712.31,
+              300.6
+            ],
+            "p": 0.188
+          }
+        },
+        {
+          "arm": "off_realistic_dynamic",
+          "label": "OFF realistic \u00b7 dynamic",
+          "signals": "off_realistic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 148.16,
+          "travel_ci": [
+            120.98,
+            182.43
+          ],
+          "wait_mean": 25.3,
+          "safety": {
+            "violations": 0,
+            "collisions": 14,
+            "emergency_brakings": 10,
+            "teleports": 0,
+            "ambulance_collisions": 3
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -64.22,
+            "ci": [
+              -148.21,
+              -5.51
+            ],
+            "p": 0.0781
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": -2301.83,
+            "ci": [
+              -4807.62,
+              20.75
+            ],
+            "p": 0.148
+          }
+        },
+        {
+          "arm": "basic_static",
+          "label": "BASIC \u00b7 static",
+          "signals": "basic",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 99.22,
+          "travel_ci": [
+            86.99,
+            111.63
+          ],
+          "wait_mean": 0.32,
+          "safety": {
+            "violations": 0,
+            "collisions": 12,
+            "emergency_brakings": 5,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -113.16,
+            "ci": [
+              -189.65,
+              -57.29
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 1289.76,
+            "ci": [
+              -630.92,
+              3108.68
+            ],
+            "p": 0.275
+          }
+        },
+        {
+          "arm": "basic_dynamic",
+          "label": "BASIC \u00b7 dynamic",
+          "signals": "basic",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 93.55,
+          "travel_ci": [
+            82.05,
+            105.69
+          ],
+          "wait_mean": 0.1,
+          "safety": {
+            "violations": 0,
+            "collisions": 14,
+            "emergency_brakings": 6,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -118.83,
+            "ci": [
+              -192.66,
+              -62.37
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 2349.77,
+            "ci": [
+              -254.62,
+              5413.53
+            ],
+            "p": 0.232
+          }
+        },
+        {
+          "arm": "coord_static",
+          "label": "COORD \u00b7 static",
+          "signals": "coord",
+          "routing": "static",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 95.83,
+          "travel_ci": [
+            85.96,
+            104.86
+          ],
+          "wait_mean": 0.36,
+          "safety": {
+            "violations": 0,
+            "collisions": 24,
+            "emergency_brakings": 4,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -116.55,
+            "ci": [
+              -195.81,
+              -58.12
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 1339.81,
+            "ci": [
+              -1469.29,
+              4095.19
+            ],
+            "p": 0.492
+          }
+        },
+        {
+          "arm": "coord_dynamic",
+          "label": "COORD \u00b7 dynamic",
+          "signals": "coord",
+          "routing": "dynamic",
+          "runs": 10,
+          "valid": 10,
+          "travel_mean": 98.06,
+          "travel_ci": [
+            82.48,
+            117.5
+          ],
+          "wait_mean": 2.11,
+          "safety": {
+            "violations": 0,
+            "collisions": 4,
+            "emergency_brakings": 3,
+            "teleports": 0,
+            "ambulance_collisions": 0
+          },
+          "travel_vs_baseline": {
+            "n": 10,
+            "mean_diff": -114.32,
+            "ci": [
+              -192.62,
+              -54.06
+            ],
+            "p": 0.00195
+          },
+          "bg_delay_vs_baseline": {
+            "n": 10,
+            "mean_diff": 1579.36,
+            "ci": [
+              -755.06,
+              4166.85
+            ],
+            "p": 0.322
+          }
+        }
+      ]
+    }
+  ]
+}

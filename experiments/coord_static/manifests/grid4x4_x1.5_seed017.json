@@ -1,0 +1,24 @@
+{
+  "run": "grid4x4_x1.5_seed017",
+  "arm": "coord_static",
+  "scenario": "grid4x4",
+  "scale": 1.5,
+  "seed": 17,
+  "window_s": 600.0,
+  "signal_program": "grid4x4_x1.5.add.xml",
+  "mission": {
+    "seed": 17,
+    "origin": "sB_B0",
+    "destination": "A3_w3",
+    "dispatch_s": 338.6,
+    "distance_m": 1281.0
+  },
+  "control": "autopilot",
+  "sumo_version": "Eclipse SUMO sumo 1.27.1",
+  "git_sha": "d73af7e81614f0ea6a4b40651e46ecb616f2382e",
+  "git_dirty": false,
+  "config_hash": "108222f43d1e9450",
+  "python": "3.13.5",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "created_at": "2026-10-05T18:04:40+00:00"
+}
