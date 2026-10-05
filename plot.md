@@ -96,6 +96,30 @@ We have **no quote**, so we give no price. We give benchmarks from the US, clear
 
 Each junction needs its approaches, signal groups and phases mapped to our model, and its conflict rules confirmed. In the testbed this comes from the network file; in the field it is a **site survey**. That is probably the biggest per-junction cost and the part that limits how fast we scale. **[ASSUMPTION]** We will cut it by importing the city's own junction data, but we have not tried.
 
+### 5.5 Retrofit ("slap-on") design: how it goes onto equipment that already exists
+
+Goal: **replace nothing.** We add at most one small box per junction cabinet and, if the operator shares its tracking feed, nothing on the ambulance.
+
+| # | Design rule | Why it keeps cost and risk low | Tag |
+|---|---|---|---|
+| 1 | **Use the ambulance's existing GPS.** The new 108 fleet is reported to be specified with GPS and vehicle tracking. | No vehicle hardware at all. If we must add one, AIS-140 trackers are listed at about ₹3,800 to ₹15,500 depending on certification, and only for pilot ambulances. | **[REPORTED]** (trade listings, vary by seller) |
+| 2 | **No detectors, cameras or roadside emitters.** Position comes from GPS, so no optical emitter on each ambulance and no receiver at each signal head. | Emitters and receivers are the per-vehicle and per-junction cost items of emitter-based systems (one US estimate: about US$1,000 per vehicle emitter). | **[REPORTED]** for the US figure; our saving is **[ASSUMPTION]** until we have quotes |
+| 3 | **Connect to the controller's input, never to the lamps.** Our box closes a dry-contact relay into the controller's own external/preemption input, the same kind of input emitter systems use. | Relay unpowered = no request = normal operation. Our hardware physically cannot show a green by itself, so a fault in our box cannot create an unsafe signal state. The controller's conflict monitor stays in the loop. | **[ASSUMPTION]** Needs a usable input on the installed controller. Check the cabinets of the first three junctions. |
+| 4 | **Hardware timer and heartbeat watchdog on the relay.** The relay drops after a fixed maximum (matching the software's 40 s limit) even if our computer hangs, and drops if the link goes silent. | A second safety net that does not depend on our software. | **[TO DO]** designed, not built |
+| 5 | **One shared server** for all junctions. | Software cost does not grow per junction. Hardware cost scales only with the number of cabinet boxes. | **[ASSUMPTION]** |
+| 6 | **Install by the city's authorised contractor** (or its vendor), not by us opening live cabinets alone. | Avoids our liability and the city's safety rules. | **[TO DO]** agree with NMMC |
+
+**If a junction cannot be retrofitted** (no free input, closed vendor controller), in order: (a) Tier A through the central system's API; (b) ask the controller vendor to enable the input (a setting or a paid option, we do not know which, **[TO DO]**); (c) leave that junction out. A corridor with some junctions equipped still helps in principle, but **we have not measured partial deployment**. It is a cheap next experiment in the testbed (preempt at a subset of junctions), so we propose to run it. **[TO DO]**
+
+**Cost statement we can defend:** "We put nothing on the vehicle if the operator shares its GPS, we add no detectors, and we touch one controller input per cabinet. That removes the main cost items of emitter-based systems. Whether our total per junction is lower is what our first quotes must prove." We do not say "cheaper" until we have quotes. The **benchmark to beat** is US$4,000 to US$7,225 per junction (US projects, **[REPORTED]**).
+
+| Part | What we know about price |
+|---|---|
+| Ambulance tracker | ₹0 if the operator's feed is shared; otherwise about ₹3,800 to ₹15,500 per unit in trade listings **[REPORTED]** |
+| Cabinet box (small computer, isolated relay, 4G modem, surge protection, weatherproof enclosure) | **No quote.** Hobby-grade parts are cheap, but field-grade (heat, surge, ingress protection) costs more. **[TO DO]** two quotes |
+| Survey and installation labour | **No quote**, probably the largest share per junction **[ASSUMPTION]** |
+| Server | Shared cloud or city data centre; small next to the junction costs **[ASSUMPTION]** |
+
 ---
 
 ## 6. Evidence we can show (and its limits)
@@ -201,42 +225,176 @@ Preemption logic is simple, and rule-based logic can be copied. We do **not** cl
 
 ---
 
-## 11. The 3-minute pitch flow (what to show, tied to the claim it proves)
+## 11. The pitch split across five speakers
 
-1. **Problem (30 s):** one slide: ambulances lose time at junctions; red-crossing is legal but our simulation shows it is dangerous.
-2. **Live demo (60 s):** dispatch in OFF → the translucent OFF ghost sets off with you → switch to BASIC: green appears after clearance → press *Create accident*: route recalculates → HUD shows measured time saved against the ghost. *Proves: verified preemption works and the number is measured, not guessed.*
-3. **Evidence (30 s):** press **R**: in-app chart with confidence intervals: 197 → ~94 s, background delay unchanged, 0 violations in 560 runs. *Say the limit in the same sentence: simulation.*
-4. **Business (45 s):** evaluation study today, shadow-mode pilot next, per-junction subscription later; Tier A/B hardware; fits beside NMMC's ITMS.
-5. **Ask (15 s):** support for the one-corridor shadow-mode pilot, tranche one.
+**Rule of the stage: one owner per topic.** Only **P2** explains how the software works. Only **P3** talks about what is installed and what it costs. Only **P4** talks about money and revenue. Only **P5** talks about whether it can work in the real world, the risks and the ask. **P1** opens and does not explain anything technical. Nobody else answers outside their topic: they hand over with the line *"[Name] owns that, let me pass it."* That removes contradictions, which is how most teams get caught.
 
-**Demo-day checks:** laptop on AC power, Edge on the RTX 4060, Wi-Fi set to *Private* if showing the dashboard on another PC, press **Reset** before the run so the ghost works.
+| Speaker | Role | Time | One-sentence version (for a 2-minute slot) |
+|---|---|---|---|
+| **P1** | Opener: problem, hook, what we built, who backs us | ~60 s | "Ambulances still wait at red lights, and our simulation shows crossing red is where they crash." |
+| **P2** | **Technical lead**: architecture, safety, live demo, evidence | ~100 s | "We give them a verified green: every signal change is checked twice, and in 560 simulated runs travel time fell from 197 to about 94 seconds, with no measurable delay to others and no safety violation." |
+| **P3** | Hardware: what we install, retrofit, cost | ~60 s | "It goes onto what cities already have: one small box in the junction cabinet feeding the controller's own input, and nothing new on the ambulance if the operator shares its GPS." |
+| **P4** | Business model: who pays, how we earn | ~70 s | "We start by selling a no-hardware evaluation to a city, then a pilot, then a per-junction subscription, through the companies already building the city's traffic system." |
+| **P5** | Feasibility and viability: gates, risks, support, the ask | ~70 s | "We move in gated stages (study, replay, shadow mode, one corridor) and ask for the first tranche to run shadow mode." |
+
+Total about 6 minutes. For a shorter slot, use the one-sentence versions (about 2 minutes) and keep the demo.
+
+### Numbers card (everyone uses exactly these, and says "simulation" with every result)
+
+- **197 s → about 94 s** at demand 1.5 (paired −103 s, 95 % CI −122 to −86, p < 0.001), 40 seeds; **560 runs** in all.
+- Other traffic's delay within **±0.7 %**, never significant. **0 safety violations** in 560 runs. **0 ambulance collisions** in 420 BASIC, COORD and OFF-strict runs.
+- Ambulance crossing red lights: in a collision in **12 of 140 runs**, saved only 17 to 34 s.
+- COORD vs BASIC: under 5 s, not significant.
+- **143 + 84** automated tests pass.
+- NMMC's reported ITMS: **58 junctions**. US cost benchmark: **US$4,000 to US$7,225 per junction**, about US$250 a year to run. Ambulance tracker listings: **₹3,800 to ₹15,500**.
+
+---
+
+### P1: Opener (about 60 s)
+
+**Say**
+- Hook: "An ambulance with its siren on still waits at a red light. The law lets it cross. Our simulation shows that is where it gets into collisions."
+- "Preemption, turning the signal green for the ambulance, is a known fix. But it is installed junction by junction, and its benefit is rarely measured fairly."
+- "We built **EmergencyFlow**: a verified emergency-priority layer for the signals a city already has, plus a simulation testbed that measures what it saves and what it costs other drivers before anything is installed."
+- Headline: "In simulation, ambulance travel time fell from 197 to about 94 seconds."
+- Support, stated exactly: "The project is supported by NMMC, IAS Administration, acknowledged by the two MLAs, and proposed to MMRDA."
+- Hand-off: "[P2] will show it running."
+
+**Do not**
+- Explain how the safety layer works, quote any cost, or say it works on real roads.
+- Say "supported" as if it were an order or a contract.
+
+**Owns questions:** none. Pass everything.
+
+---
+
+### P2: Technical lead (about 100 s, the only person who explains the technology)
+
+**Say (about 20 s, architecture)**
+- "SUMO, a standard traffic simulator, is the single source of truth. Rules propose a signal change. A **safety controller** replays it against the junction's conflict matrix and the 4-second yellow and 2-second all-red, and rejects anything unsafe. A **separate monitor** then checks the states the simulator really produced. Two independent checks."
+- "The decision logic is **rule-based**, not machine learning, and that is deliberate: a rule can be audited."
+
+**Do (about 60 s, live demo)**
+1. Dispatch in OFF: the translucent **OFF ghost** sets off on the same traffic.
+2. Switch to **BASIC**: the signal goes green after yellow and all-red clearance.
+3. Switch to **COORD**: junctions ahead are prepared.
+4. **Create accident**: the route is recalculated and shows "route compromised".
+5. On arrival the HUD shows the **measured** time saved against the ghost.
+
+**Say (about 20 s, evidence)**
+- "560 paired runs on identical traffic, against a signal plan tuned for each demand so the baseline is not a strawman: 197 to about 94 seconds, other traffic within ±0.7 %, 0 violations. We also report what did not help: coordination and re-routing added nothing without accidents."
+- "All of this is simulation."
+- Hand-off: "[P3] will explain what we install."
+
+**Do not**
+- Quote prices, claim field results, or call COORD or the routing machine learning.
+
+**Owns questions:** how rules and safety work, simulation validity, the "is it AI" question, abuse prevention, software failure, two ambulances, the numbers and charts. Keep the app open on the **R** chart.
+
+---
+
+### P3: Hardware (about 60 s)
+
+**Say**
+- "Our principle: **replace nothing.**"
+- "On the vehicle: nothing, if the ambulance operator shares the GPS feed its fleet is reported to have. Otherwise one tracker, listed at a few thousand rupees, only for pilot ambulances."
+- "At the junction: no cameras, no detectors, no emitters. One small box in the cabinet closes a relay into the **controller's own preemption input**. It never touches the lamps, so a fault in our box cannot create a green by itself. A hardware timer and watchdog drop the request even if our software hangs."
+- "The city's controller keeps its own conflict protection. Ours is an extra layer."
+- "Where a junction cannot take it, we connect through the city's central signal system instead, or leave that junction out."
+- Cost, stated safely: "Emitter-based systems in the US cost about US$4,000 to US$7,225 per junction plus equipment on every vehicle. We remove the vehicle equipment and the detectors. **Our own quotes are the next step**, and we will not claim a total before we have them."
+- Hand-off: "[P4] will explain how this earns revenue."
+
+**Do not**
+- Say "cheaper" without a quote, quote a cabinet-box price, or say it works with every controller. The input on the installed controllers is **unverified** until the first three cabinets are checked.
+
+**Owns questions:** what is installed, per-junction cost, compatibility with existing controllers, a junction with no input, who installs it, whether the ambulance needs new hardware. See section 5.5.
+
+---
+
+### P4: Business model (about 70 s)
+
+**Say**
+- "Customers: the **municipal corporation** pays. The **signal integrators** building the city's traffic system are our channel. The **ambulance operator** is a data partner. Hospitals are a later extra."
+- "Four revenue streams, in the order we can start them: (1) an **evaluation and planning study** run on a city's own network, which needs **no hardware and works today**; (2) a **pilot and integration** project; (3) a **per-junction annual subscription** for hosting, monitoring, updates and safety reports; (4) hardware passed through at a modest margin."
+- Honest economics: "Running costs in this category are small per junction (about US$250 a year in one US estimate), so this is **not a one-city business**. It works through many junctions, many cities, and services that do not scale with junction count, like studies and verification."
+- "Our moat is **not** the rules. It is the verified safety layer and audit trail, the reproducible evaluation, the integrations and relationships, and later the field data."
+- "NMMC is rolling out its own traffic system at 58 junctions. We position as the verified add-on or the independent checker, not a rival."
+- Hand-off: "[P5] will show how we get there safely."
+
+**Do not**
+- State a price, a market size or a revenue forecast: none has been tested. Say so.
+- Promise a purchase.
+
+**Owns questions:** why a city would pay, price, market size, competition, moat, time to revenue, open-source licence.
+
+---
+
+### P5: Feasibility and viability, and the close (about 70 s)
+
+**Say**
+- "What is proven: in simulation, 560 runs. What is not: anything on real roads. We say that plainly."
+- "We move in **gated stages**. (1) Run the study on a real NMMC corridor with no hardware. (2) Replay recorded ambulance GPS tracks. (3) **Shadow mode**: live positions, our system computes what it would do and logs it, and **nothing is sent to any signal**. (4) A one-corridor pilot with the traffic authority's written approval and the controller's protections on. (5) Scale. We move on only when each gate is met."
+- Biggest risks and what we do: the city's own system may already cover this (we will ask for the specification first); approvals and liability (written approval and legal opinion before any live signal); misuse (requests need a registered vehicle and an active dispatch, designed, not yet built); single ambulance only.
+- "We have **support**, not a purchase order."
+- **The ask:** "Support for the first tranche: the study and shadow mode. Each later tranche is released only at a gate." **[Fill in the figure and use of funds first.]**
+- Close in one line: "A verified green for the ambulance, measured before anything is installed."
+
+**Do not**
+- Give dates (we give gates), imply field safety, or hide that the team is missing traffic-engineering, legal and procurement experience: name it, with the plan to add it.
+
+**Owns questions:** does it work in the real world, timeline, risks, the NMMC ITMS overlap, government support, team, scaling past one city, what we need from the judges.
+
+---
+
+### Question routing (who answers what)
+
+| If they ask about | Owner | Do not let anyone else improvise |
+|---|---|---|
+| How it works, safety, "is it AI", simulation validity, abuse, failure, charts | **P2** | Anything algorithmic or about verification |
+| What is installed, cost per junction, existing controllers, installation | **P3** | Any hardware price or compatibility claim |
+| Money, pricing, market, competition, moat, licence | **P4** | Any figure about revenue |
+| Real-world proof, timeline, risks, government, team, ITMS overlap, the ask | **P5** | Any promise of dates or results on real roads |
+| Greeting, "what is it", support wording | **P1** | Everything else, pass on |
+
+**If nobody knows:** the whole team uses one line: *"We have not measured that yet. Here is how we would find out:"* and the owner names the stage or the [TO DO].
 
 ---
 
 ## 12. Questions a judge or investor will ask (and the answers)
 
+Each question is tagged with its **owner** (P1 to P5, section 11). Only the owner answers.
+
 | Question | Answer |
 |---|---|
-| **Is this real AI?** | The decision logic is rule-based plus shortest-path routing, and we say that. Rules are auditable, which matters for safety approval. ML for prediction is the roadmap and sits behind the same safety layer; the testbed is how we would prove it helps. |
-| **Does it work in the real world?** | Not yet proven; all numbers are from simulation. That is why the plan starts with shadow mode and a single corridor, with gates. |
-| **Is the simulation even valid?** | It is a standard traffic simulator (SUMO), our baseline is tuned, runs are paired on identical traffic, and we report intervals and p-values. Limits: synthetic grid, cars only, no two-wheelers or pedestrians. Calibrating to Navi Mumbai data is stage 1. |
-| **Isn't NMMC's ITMS already doing green corridors?** | It plans to **[REPORTED]**; we have not seen the specification. We position as a safe, verified add-on or independent checker, and we will request the spec. If it already works well, our value is verification and other cities. |
-| **What do you install?** | Tier A: nothing at the junction. Tier B: one small gateway in the cabinet wired to the controller's own preemption input, with the controller's protections still in charge. Vehicle: the operator's existing GPS if shared, otherwise a 4G tracker. |
-| **What if it fails?** | No position or link → no request → the junction runs its normal program. Software error → controller recovers every junction with full clearance and drops to normal signals. These behaviours are tested in simulation, and field link-loss testing is stage 3. |
-| **Can someone abuse it to get green lights?** | Requests need a registered vehicle *and* an active dispatch from the operator, plus rate limits and logs. **Designed, not built yet.** |
-| **Will it delay other drivers?** | In simulation, not measurably (within ±0.7 %, never significant). The paired design reports the cost next to the benefit. A field pilot must re-measure it. |
-| **Will it cause accidents at the junction?** | The safety layer rejects conflicting greens and enforces 4 s yellow and 2 s all-red; the monitor found 0 violations in 560 runs. The simulator also showed the alternative (crossing red) had ambulance collisions in 12 of 140 runs. In the field, the controller's own conflict monitor stays in force. |
-| **Why would a city pay?** | Evaluation study first: a measured answer for its own network with no hardware. Then a pilot, then a per-junction subscription. **No price has been tested yet.** |
-| **How big is the market?** | We do not have a validated number and will not invent one. Benchmarks suggest thin per-junction revenue (US$250 a year to operate in one US estimate), so the business needs many junctions, many cities or bundled services. |
-| **Why you and not an established vendor?** | We do not claim a better device. We offer verification, reproducible evaluation and low-friction integration. Established vendors have field track records we lack. |
-| **What is your moat?** | Not the rules. The audit trail, the evaluation evidence, integrations and relationships, and later field data. |
-| **Who is on the team and what are you missing?** | **[TO DO: fill in names and roles.]** Honest gaps: field/traffic-engineering experience, legal, and a government-procurement contact. We would add these through advisors or hires. |
-| **Does the government actually support this?** | The project is supported by NMMC (IAS Administration) and acknowledged by the two MLAs named in the paper, and proposed to MMRDA. **That is support, not a purchase order.** Have the letters or emails ready. |
-| **What about two ambulances, buses, trucks, pedestrians?** | Not built or modelled. Multi-vehicle priority is on the roadmap; heavy vehicles need protected-turn phases. |
-| **How do you scale past one city?** | The testbed imports a network and runs; the per-junction survey is the bottleneck, and we plan to use the city's own junction data to cut it. **Not yet tested.** |
-| **How long until revenue?** | An evaluation study can start as soon as a city shares network data. Hardware revenue depends on approvals, so we give gates, not dates. |
-| **Is the software open?** | The testbed is built to be open and reproducible; what we sell is the verified field layer, integrations and support. Confirm the licence choice with the team before saying so. **[TO DO]** |
-| **Can you show the numbers again?** | Press **R** in the app, or open `experiments/summary/`. Every run has a manifest with the code version and seed. |
+| **[P2] Is this real AI?** | The decision logic is rule-based plus shortest-path routing, and we say that. Rules are auditable, which matters for safety approval. ML for prediction is the roadmap and sits behind the same safety layer; the testbed is how we would prove it helps. |
+| **[P5] Does it work in the real world?** | Not yet proven; all numbers are from simulation. That is why the plan starts with shadow mode and a single corridor, with gates. |
+| **[P2] Is the simulation even valid?** | It is a standard traffic simulator (SUMO), our baseline is tuned, runs are paired on identical traffic, and we report intervals and p-values. Limits: synthetic grid, cars only, no two-wheelers or pedestrians. Calibrating to Navi Mumbai data is stage 1. |
+| **[P5] Isn't NMMC's ITMS already doing green corridors?** | It plans to **[REPORTED]**; we have not seen the specification. We position as a safe, verified add-on or independent checker, and we will request the spec. If it already works well, our value is verification and other cities. |
+| **[P3] What do you install?** | Tier A: nothing at the junction. Tier B: one small gateway in the cabinet wired to the controller's own preemption input, with the controller's protections still in charge. Vehicle: the operator's existing GPS if shared, otherwise a 4G tracker. |
+| **[P2; hardware failure: P3] What if it fails?** | No position or link → no request → the junction runs its normal program. Software error → controller recovers every junction with full clearance and drops to normal signals. These behaviours are tested in simulation, and field link-loss testing is stage 3. |
+| **[P2] Can someone abuse it to get green lights?** | Requests need a registered vehicle *and* an active dispatch from the operator, plus rate limits and logs. **Designed, not built yet.** |
+| **[P2] Will it delay other drivers?** | In simulation, not measurably (within ±0.7 %, never significant). The paired design reports the cost next to the benefit. A field pilot must re-measure it. |
+| **[P2] Will it cause accidents at the junction?** | The safety layer rejects conflicting greens and enforces 4 s yellow and 2 s all-red; the monitor found 0 violations in 560 runs. The simulator also showed the alternative (crossing red) had ambulance collisions in 12 of 140 runs. In the field, the controller's own conflict monitor stays in force. |
+| **[P4] Why would a city pay?** | Evaluation study first: a measured answer for its own network with no hardware. Then a pilot, then a per-junction subscription. **No price has been tested yet.** |
+| **[P4] How big is the market?** | We do not have a validated number and will not invent one. Benchmarks suggest thin per-junction revenue (US$250 a year to operate in one US estimate), so the business needs many junctions, many cities or bundled services. |
+| **[P4] Why you and not an established vendor?** | We do not claim a better device. We offer verification, reproducible evaluation and low-friction integration. Established vendors have field track records we lack. |
+| **[P4] What is your moat?** | Not the rules. The audit trail, the evaluation evidence, integrations and relationships, and later field data. |
+| **[P5] Who is on the team and what are you missing?** | **[TO DO: fill in names and roles.]** Honest gaps: field/traffic-engineering experience, legal, and a government-procurement contact. We would add these through advisors or hires. |
+| **[P5] Does the government actually support this?** | The project is supported by NMMC (IAS Administration) and acknowledged by the two MLAs named in the paper, and proposed to MMRDA. **That is support, not a purchase order.** Have the letters or emails ready. |
+| **[P2] What about two ambulances, buses, trucks, pedestrians?** | Not built or modelled. Multi-vehicle priority is on the roadmap; heavy vehicles need protected-turn phases. |
+| **[P5; survey cost: P3] How do you scale past one city?** | The testbed imports a network and runs; the per-junction survey is the bottleneck, and we plan to use the city's own junction data to cut it. **Not yet tested.** |
+| **[P4] How long until revenue?** | An evaluation study can start as soon as a city shares network data. Hardware revenue depends on approvals, so we give gates, not dates. |
+| **[P4] Is the software open?** | The testbed is built to be open and reproducible; what we sell is the verified field layer, integrations and support. Confirm the licence choice with the team before saying so. **[TO DO]** |
+| **[P2] Can you show the numbers again?** | Press **R** in the app, or open `experiments/summary/`. Every run has a manifest with the code version and seed. |
+| **[P3] How much does it cost per junction?** | We have no quote yet and will not invent one. The design removes vehicle equipment (if the operator shares its GPS) and detectors, and touches one controller input per cabinet. The US benchmark we must beat is US$4,000 to US$7,225 per junction. We will publish a bill of materials after two real quotes. |
+| **[P3] Will it work with the controllers the city already has?** | Unverified. It needs a usable external input on the controller, the same kind emitter systems use. We will check the cabinets of the first three junctions. If a junction has none: use the city's central system, ask the vendor to enable the input, or leave that junction out. |
+| **[P3] Could your box turn a signal green on its own, or stick on?** | By design, no. It only closes a contact into the controller's request input and never connects to the lamps; unpowered, it requests nothing. A hardware timer and watchdog drop the request if our software hangs, and the controller's own conflict monitor stays in force. **Designed, not built yet.** |
+| **[P3] Does the ambulance need new equipment?** | Not if the operator shares its GPS feed (the new 108 fleet is reported to have one). Otherwise one tracker per pilot ambulance, listed at about ₹3,800 to ₹15,500. |
+| **[P3] What if only some junctions on a route are equipped?** | We have not measured that. It is a cheap next experiment in the testbed (preempt at a subset of junctions), and we will run it before claiming a corridor effect. |
+| **[P3 and P5] Who installs it, and who is responsible if something fails in the cabinet?** | The city's authorised contractor or vendor, with the city's written approval. Liability is unresolved and needs a legal opinion and insurance before any live signal is touched (stage 4). |
+| **[P4] Who is your first customer?** | A municipal corporation, through the no-hardware evaluation study. NMMC is the natural first conversation. That is a conversation, not a commitment. |
+| **[P5] What is your biggest risk?** | That the city's own traffic system already covers this, and that approvals and liability slow a pilot. We answer with a specification request to NMMC, the verifier position, gated stages and shadow mode before any live signal. |
+| **[P5] What do you need from us?** | Support for the first tranche: the evaluation study on a real corridor and shadow mode. Plus introductions to a municipal traffic engineer, the signal integrator and the ambulance operator. |
 
 ---
 
@@ -256,6 +414,8 @@ We attacked our own plan. These are the holes, ranked by how much damage they co
 10. **Several external facts come from press summaries, not primary documents** (ITMS scope, 108 fleet, legal exemption, US field results). *Response:* open the linked sources and quote only what you have read. Remove anything you cannot back up.
 11. **Cost figures are US benchmarks, not quotes.** *Response:* label them as such every time; get local quotes.
 12. **The pitch must not overpromise safety.** *Response:* "verified in simulation by two independent checks" is true; "safe on real roads" is not yet true.
+13. **The controller input is unverified.** The retrofit assumes the installed controllers have a usable external input. *Response:* say "assumption", check three real cabinets first, and fall back to the city's central system or leave a junction out.
+14. **Cost-effectiveness is a design claim, not a measured one.** *Response:* the only defensible statement is what we remove (vehicle equipment, detectors); no total is claimed until two quotes exist.
 
 ---
 
@@ -266,6 +426,10 @@ We attacked our own plan. These are the holes, ranked by how much damage they co
 - [ ] Get written confirmation of the NMMC / MLA / MMRDA wording.
 - [ ] Fill in the team, roles and the funding ask.
 - [ ] Get two or more real hardware quotes (gateway, relay interface, 4G tracker).
+- [ ] Look inside the cabinet of at least three real junctions (with the city's permission) and write down which external inputs the controller has.
+- [ ] Assign P1 to P5 by name, and let each person rehearse their own section plus the one-sentence version of the other four.
+- [ ] Record a backup video of the demo, in case the live run fails on the day.
+- [ ] Run the partial-deployment experiment (preempt at only some junctions) so P3 has a measured answer.
 - [ ] Compile the paper (Overleaf) and fill in author names.
 - [ ] Rehearse the demo, including the Wi-Fi *Private* setting and the **Reset** before the run.
 - [ ] Practise the answers in section 12 out loud; the weakest ones are 1, 2, 4 and 5 in section 13.
@@ -282,6 +446,7 @@ We attacked our own plan. These are the holes, ranked by how much damage they co
 - Mumbai Live, ITMS first phase on Palm Beach Road: <https://www.mumbailive.com/en/civic/intelligent-traffic-management-system-to-be-installed-soon-in-navi-mumbai-91112>
 - NIUA ICCC use case (ATCS at 63 junctions, as shown in search snippet; **not opened**): <https://iccc.niua.org/iccc/sector/use-case/815e6212def15fe76ed27cec7a393d59>
 - Maharashtra 108 service contract and fleet (about 1,756 ambulances, GPS and tablets): <https://www.mypunepulse.com/maharashtra-health-dept-signs-%E2%82%B91600-crore-deal-for-108-ambulance-services-amid-allegations-of-irregularities/>
+- AIS-140 tracker price listings (trade listings, ₹3,800 to ₹15,500; vary by certification and seller): <https://www.tradeindia.com/manufacturers/ais-140-gps-tracker.html> and <https://dir.indiamart.com/impcat/ais-140-gps-system.html>
 - Maharashtra EMS (official): <https://nhm.maharashtra.gov.in/en/scheme/maharashtra-emergency-medical-services-mems-emergency-medical-service-on-call/>
 - Ambulance traffic-rule summaries (secondary; confirm with a lawyer): <https://vmedo.com/blog/traffic-rules-for-ambulances-in-india/> and <https://saferoadlife.in/emergency-vehicles-on-indian-roads-and-exemptions-for-breaking-traffic-rules/>
 - Our own results: `experiments/summary/summary.json`, `experiments/summary/paired.csv`, `experiments/summary/collisions.csv`, `paper/emergencyflow.tex`, and `README.md` (Evaluation results).
