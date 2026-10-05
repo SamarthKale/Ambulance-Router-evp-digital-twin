@@ -173,7 +173,7 @@ cd backend
 .venv\Scripts\python.exe -m scripts.smoke_compare                          # OFF vs BASIC on one seed (smoke only)
 .venv\Scripts\python.exe -m scripts.benchmark                              # tick time + message size, 2x2/4x4 x 1.0/1.5
 .venv\Scripts\python.exe -m scripts.eta_check                              # routing ETA vs measured, seeded autopilot (4x4)
-.venv\Scripts\python.exe -m scripts.run_experiments --scales 1.5 --seeds 1-20 --ci-target 15   # all arms, paired
+.venv\Scripts\python.exe -m scripts.run_experiments --scales 1.5 --seeds 1-20 --error-bar 15    # all arms, paired
 .venv\Scripts\python.exe -m scripts.run_experiments --scales 0.75,1.0,2.0 --seeds 1-10        # demand sweep
 .venv\Scripts\python.exe -m scripts.run_experiments --report-only                            # charts from the CSVs
 .venv\Scripts\python.exe -m scripts.gen_contract                           # after ANY change to api/protocol.py or a scenario
@@ -618,7 +618,7 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - SUMO activates the loaded program (`SumoConfig.signal_programs`). `load_signal_tables(net, programs)` gives the safety controller, the monitor and routing the same program, and recovery resumes it by its program id. The tuned program passes the monitor (tested).
   - The live demo keeps the net's 74 s program (`--program net` runs the experiments on it).
 - **Fairness:**
-  - Use the same seed set across all arms and report paired differences with bootstrap 95% CIs (plus a Wilcoxon test). Pick the run count by CI width.
+  - Use the same seed set across all arms and report paired differences with bootstrap 95% confidence intervals (plus a Wilcoxon test). Pick the run count by the width of the confidence interval.
   - Randomize dispatch time after a ≥300 s warm-up, plus origin and destination per seed.
     - Per seed (`evaluation/missions.py`): dispatch at 300 s plus a random point in one 74 s cycle; start at the beginning of a random entry road, destination 15 m before the end of a random exit road on another side of the map, at least 0.75 x the map's larger side apart.
     - Every arm of a seed replays the same traffic up to the dispatch, with no ambulance yet (determinism, section 6). A fingerprint of the traffic at dispatch is stored per run, and the report checks it is equal across arms (`pairing_ok`).
@@ -642,10 +642,10 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - Safety: the monitor's violations, SUMO collisions in the window, and emergency brakings and teleports from the SUMO log after the dispatch. Must be 0 beyond the OFF baseline on the same seeds.
 - **Data quality:** teleports are counted per run. A run with a teleport after the dispatch, or not arrived, is flagged `valid=false`, and pairs containing one are excluded (the report gives `n` and `excluded`).
 - **Statistics** (`evaluation/stats.py`): paired differences (arm minus reference) per scenario, demand and metric.
-  - The 95 % CI of the mean difference uses a percentile bootstrap (10,000 resamples, seeded).
+  - The 95 % confidence interval of the mean difference uses a percentile bootstrap (10,000 resamples, seeded).
   - The Wilcoxon signed-rank p-value is exact (all sign assignments, ties allowed). It matches full enumeration in tests.
   - References: every arm against `off_strict_static`, and dynamic against static routing for each signal mode.
-  - `--ci-target S` adds seeds in batches until every arm's travel-time CI half-width against the baseline is at most S seconds, or `--max-seeds` is reached.
+  - `--error-bar S` adds seeds in batches until every arm's travel-time error bar against the baseline (the confidence interval's half-width) is at most ±S seconds, or `--max-seeds` is reached. ("Confidence interval" here is statistics; the project has no CI/CD.)
 - **Ghost comparison run** (`simulation/ghost.py`, live server only, `EF_GHOST=1`):
   - A shadow simulation runs in its own process from the moment the live one opens: same configuration and warm-up, stepped in lockstep with the live time, with no ambulance. Its traffic is the live traffic.
   - At the first dispatch after a reset it spawns its own ambulance at the same simulated moment, driven in OFF mode by the autopilot. Live accidents are mirrored at the same moment.
@@ -654,7 +654,7 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - Later dispatches report the ghost `unavailable`: they follow a history (manual driving, preemptions) the shadow can't reproduce. Saved SUMO states were tried for this and rejected (section 6).
 - **Output:** `experiments/<arm>/runs.csv` plus one run manifest per run in `experiments/<arm>/manifests/`, with the SUMO version, git SHA and dirty flag, config hash (scenario files, SUMO options, signal program, arm, window), seed, scale, arm, mission and signal program.
   - Experiments run from a clean commit, from a git worktree, so code edits during a batch can't mix into it.
-  - `experiments/summary/` holds `paired.csv`, `summary.json` (read by the app) and the charts: travel time per arm, paired differences against the baseline with CIs, and the demand sweep.
+  - `experiments/summary/` holds `paired.csv`, `summary.json` (read by the app) and the charts: travel time per arm, paired differences against the baseline with confidence intervals, and the demand sweep.
   - Charts are labelled as autopilot batch results, since the live demo is manual.
 
 ## 15. Demo script
@@ -672,7 +672,7 @@ Labels are the UI's own. The README has the same script for presenters.
 3. Switch to BASIC: the signal turns green on approach after yellow + all-red clearance.
 4. Switch to COORD: downstream junctions prepare ("prepared ahead"); route overlay shown.
 5. Press **Create accident**: "Route compromised", the route recalculates, the ETA change is shown; the ghost meets the same accident.
-6. On arrival the HUD shows the time saved against the ghost (measured). Press **R** for the comparison chart **inside the app**: batch results per arm with CIs, background delay and safety. Switching windows or tabs releases the keys and the ambulance coasts to a stop, by design.
+6. On arrival the HUD shows the time saved against the ghost (measured). Press **R** for the comparison chart **inside the app**: batch results per arm with confidence intervals, background delay and safety. Switching windows or tabs releases the keys and the ambulance coasts to a stop, by design.
 
 ## 16. Do / Don't
 
