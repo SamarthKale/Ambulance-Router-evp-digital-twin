@@ -5,27 +5,45 @@ import { TopDownScene } from "../components/TopDownScene";
 import { Hud } from "../dashboard/Hud";
 import { useSim, type CommandBody } from "../simulation/state";
 import { useManualDrive } from "../simulation/useManualDrive";
-import { SimSocket, fetchNetwork, socketUrl } from "../simulation/websocket";
+import { SimSocket, fetchNetwork, socketUrl, tabClientId } from "../simulation/websocket";
 
 export function App() {
   const network = useSim((s) => s.network);
+  const connection = useSim((s) => s.connection);
+  const role = useSim((s) => s.role);
   const [error, setError] = useState<string | null>(null);
   const socket = useRef<SimSocket | null>(null);
 
   useEffect(() => {
-    const sim = new SimSocket(socketUrl());
+    const sim = new SimSocket(socketUrl(), tabClientId());
     socket.current = sim;
     sim.connect();
-    fetchNetwork()
-      .then((n) => useSim.getState().setNetwork(n))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     return () => sim.close();
   }, []);
+
+  // (Re)load the map on every (re)connect: a restarted backend may run another scenario.
+  useEffect(() => {
+    if (connection !== "open") return;
+    let cancelled = false;
+    fetchNetwork()
+      .then((fetched) => {
+        if (cancelled) return;
+        setError(null);
+        const current = useSim.getState().network;
+        if (!current || JSON.stringify(current) !== JSON.stringify(fetched)) {
+          useSim.getState().setNetwork(fetched); // unchanged map: keep the built geometry
+        }
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [connection]);
 
   const send = useCallback((command: CommandBody) => {
     socket.current?.send(command);
   }, []);
-  useManualDrive(send);
+  useManualDrive(send, undefined, role !== "observer");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -46,6 +64,7 @@ export function App() {
         onDispatch={() => send({ cmd: "spawn_ambulance" })}
         onReset={() => send({ cmd: "reset" })}
         onMode={(mode) => send({ cmd: "set_mode", mode })}
+        onRelease={() => send({ cmd: "release_control" })}
       />
       {error && <div className="banner">Backend not reachable: {error}</div>}
     </div>

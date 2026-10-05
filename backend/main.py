@@ -12,9 +12,10 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from api.channel import Broadcaster
 from api.protocol import NetworkMsg
 from api.routes import router as api_router
-from api.websocket import Broadcaster
+from api.session import DRIVER_GRACE_S, SessionManager
 from api.websocket import router as ws_router
 from simulation.engine import SimulationEngine
 from simulation.sumo import REPO_ROOT, SumoConfig
@@ -30,10 +31,13 @@ def engine_from_env() -> SimulationEngine:
         scale=float(os.environ.get("EF_SCALE", "1.0")),
         routes=LIVE_ROUTES,  # 24 h of background traffic; experiments keep the 1 h file
     )
-    return SimulationEngine(config)
+    # Fast-forward on (re)start so the demo opens with traffic already flowing.
+    return SimulationEngine(config, warmup_s=float(os.environ.get("EF_WARMUP_S", "120")))
 
 
-def create_app(engine: SimulationEngine | None = None) -> FastAPI:
+def create_app(
+    engine: SimulationEngine | None = None, driver_grace_s: float = DRIVER_GRACE_S
+) -> FastAPI:
     engine = engine or engine_from_env()
     broadcaster = Broadcaster()
 
@@ -47,6 +51,7 @@ def create_app(engine: SimulationEngine | None = None) -> FastAPI:
     app = FastAPI(title="EmergencyFlow AI", version="0.2.0", lifespan=lifespan)
     app.state.engine = engine
     app.state.broadcaster = broadcaster
+    app.state.session = SessionManager(grace_s=driver_grace_s)
     app.state.network = NetworkMsg.model_validate(engine.network.payload())
     app.include_router(api_router)
     app.include_router(ws_router)

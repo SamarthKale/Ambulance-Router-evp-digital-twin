@@ -20,6 +20,7 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import sumolib
 from traci import constants as tc
@@ -51,6 +52,8 @@ LANE_CHANGE_ROOM_M = 25.0  # road needed per lane change before the stop line...
 LANE_CHANGE_TIME_S = 2.0  # ...or this long at the current speed, whichever is more
 
 Edge = sumolib.net.edge.Edge
+_AMBULANCE_VARS = (tc.VAR_NEXT_TLS, tc.VAR_STOPSTATE, tc.VAR_LANEPOSITION)
+_STOPPED = 1  # bit 0 of VAR_STOPSTATE
 _LANE_BLOCKED = (
     tc.LCA_BLOCKED_BY_LEFT_LEADER
     | tc.LCA_BLOCKED_BY_LEFT_FOLLOWER
@@ -133,7 +136,8 @@ class ManualController:
         if not vehicle.edge.startswith(":") and vehicle.edge != self._edge:
             self._enter_edge(vehicle)
         hospital = self._network.hospital.edge
-        if vehicle.edge == hospital and self._conn.vehicle.isStopped(AMBULANCE_ID):
+        stopped = int(self._subscribed(tc.VAR_STOPSTATE, 0)) & _STOPPED
+        if vehicle.edge == hospital and stopped:
             self._status = "arrived"
             self._arrived_at = sim_time
 
@@ -142,7 +146,7 @@ class ManualController:
             return AmbulanceStatus("none")
         next_signal = None
         if self._status == "driving":
-            upcoming = self._conn.vehicle.getNextTLS(AMBULANCE_ID)
+            upcoming = self._subscribed(tc.VAR_NEXT_TLS, ())
             if upcoming:
                 tls_id, link_index, distance, state = upcoming[0]
                 next_signal = NextSignal(tls_id, int(link_index), float(distance), state)
@@ -229,6 +233,13 @@ class ManualController:
         self._conn.vehicle.setSpeedMode(AMBULANCE_ID, SPEED_MODE)
         self._conn.vehicle.setLaneChangeMode(AMBULANCE_ID, LANE_CHANGE_MODE)
         self._conn.vehicle.setSpeed(AMBULANCE_ID, 0.0)
+        # Next signal, stop state and lane position arrive with every simulationStep reply
+        # instead of three extra TraCI round trips per tick. SUMO drops the subscription
+        # when the vehicle leaves, so a respawn subscribes again here.
+        self._conn.vehicle.subscribe(AMBULANCE_ID, _AMBULANCE_VARS)
+
+    def _subscribed(self, var: int, default: Any) -> Any:
+        return self._conn.vehicle.getSubscriptionResults(AMBULANCE_ID).get(var, default)
 
     def _enter_edge(self, vehicle: VehicleState) -> None:
         self._edge = vehicle.edge
@@ -311,7 +322,7 @@ class ManualController:
 
     def _room_left(self, vehicle: VehicleState) -> float:
         lane = self._net.getEdge(vehicle.edge).getLane(vehicle.lane)
-        return float(lane.getLength()) - self._conn.vehicle.getLanePosition(AMBULANCE_ID)
+        return float(lane.getLength()) - float(self._subscribed(tc.VAR_LANEPOSITION, 0.0))
 
     @staticmethod
     def _room_per_change(vehicle: VehicleState) -> float:

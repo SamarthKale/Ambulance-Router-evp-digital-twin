@@ -50,6 +50,20 @@ describe("receiveState", () => {
     store.receiveState(tick(2, 0.1, 0), 1100);
     expect(useSim.getState().prev).toBeNull();
   });
+
+  it("does not interpolate across a reconnect gap", () => {
+    const store = useSim.getState();
+    store.receiveState(tick(1, 10.0, 0), 1000);
+    store.receiveState(tick(90, 19.0, 0), 4000); // 3 s later, after a reconnect
+    expect(useSim.getState().prev).toBeNull();
+  });
+});
+
+describe("receiveSession", () => {
+  it("tracks the driver lock role", () => {
+    useSim.getState().receiveSession({ v: 1, type: "session", clientId: "tab-x-1234", role: "observer" });
+    expect(useSim.getState().role).toBe("observer");
+  });
 });
 
 describe("input latency", () => {

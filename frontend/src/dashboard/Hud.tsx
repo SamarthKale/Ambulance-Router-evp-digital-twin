@@ -9,7 +9,14 @@ interface HudProps {
   onDispatch: () => void;
   onReset: () => void;
   onMode: (mode: SignalMode) => void;
+  onRelease: () => void;
 }
+
+const ROLE_TEXT = {
+  driver: "You are driving",
+  observer: "Observer: another screen is driving",
+  free: "Dispatch to take control",
+} as const;
 
 const TURN_LABEL = { left: "LEFT", straight: "STRAIGHT", right: "RIGHT", uturn: "U-TURN" } as const;
 const MODES: { mode: SignalMode; title: string; ready: boolean }[] = [
@@ -19,19 +26,23 @@ const MODES: { mode: SignalMode; title: string; ready: boolean }[] = [
 ];
 const LOG_LINES = 5;
 
-export function Hud({ network, onDispatch, onReset, onMode }: HudProps) {
-  const { connection, curr, keys, lastReply, latencyMs, follow, fps, toggleFollow } = useSim(
-    useShallow((s) => ({
-      connection: s.connection,
-      curr: s.curr,
-      keys: s.keys,
-      lastReply: s.lastReply,
-      latencyMs: s.latencyMs,
-      follow: s.follow,
-      fps: s.fps,
-      toggleFollow: s.toggleFollow,
-    })),
-  );
+export function Hud({ network, onDispatch, onReset, onMode, onRelease }: HudProps) {
+  const { connection, curr, keys, lastReply, latencyMs, follow, fps, drawCalls, role, toggleFollow } =
+    useSim(
+      useShallow((s) => ({
+        connection: s.connection,
+        curr: s.curr,
+        keys: s.keys,
+        lastReply: s.lastReply,
+        latencyMs: s.latencyMs,
+        follow: s.follow,
+        fps: s.fps,
+        drawCalls: s.drawCalls,
+        role: s.role,
+        toggleFollow: s.toggleFollow,
+      })),
+    );
+  const observer = role === "observer";
   const msg = curr?.msg;
   const amb = msg?.ambulance;
   const vehicle = ambulanceOf(msg);
@@ -49,10 +60,19 @@ export function Hud({ network, onDispatch, onReset, onMode }: HudProps) {
     <div className="hud">
       <header className="hud-row">
         <strong>EmergencyFlow AI</strong>
-        <span className={`pill ${connection}`}>{connection}</span>
+        <span className={`pill ${connection}`}>{connection === "open" ? "open" : "reconnecting"}</span>
       </header>
       <div className="hud-row muted">
-        t = {msg ? msg.t.toFixed(1) : "-"} s · {msg?.vehicles.length ?? 0} vehicles · {fps} FPS
+        t = {msg ? msg.t.toFixed(1) : "-"} s · {msg?.vehicles.length ?? 0} vehicles · {fps} FPS ·{" "}
+        {drawCalls} draws
+      </div>
+      <div className={`hud-row role ${role}`}>
+        {ROLE_TEXT[role]}
+        {role === "driver" && (
+          <button className="small-button" onClick={onRelease}>
+            Release control
+          </button>
+        )}
       </div>
 
       <div className="hud-row modes" role="group" aria-label="Signal mode">
@@ -60,7 +80,7 @@ export function Hud({ network, onDispatch, onReset, onMode }: HudProps) {
           <button
             key={mode}
             title={title}
-            disabled={!ready}
+            disabled={!ready || observer}
             className={msg?.mode === mode ? "active" : ""}
             onClick={() => onMode(mode)}
           >
@@ -129,8 +149,12 @@ export function Hud({ network, onDispatch, onReset, onMode }: HudProps) {
       </section>
 
       <div className="hud-row">
-        <button onClick={onDispatch}>Dispatch ambulance</button>
-        <button onClick={onReset}>Reset</button>
+        <button onClick={onDispatch} disabled={observer}>
+          Dispatch ambulance
+        </button>
+        <button onClick={onReset} disabled={observer}>
+          Reset
+        </button>
         <button onClick={toggleFollow} className={follow ? "active" : ""}>
           Follow (F)
         </button>

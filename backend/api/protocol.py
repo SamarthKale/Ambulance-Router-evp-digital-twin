@@ -85,8 +85,28 @@ class ResetCmd(_Command):
     cmd: Literal["reset"]
 
 
+class HelloCmd(_Command):
+    """First message on every (re)connect: the tab's id, so a reconnecting driver keeps
+    control. Answered with a session message, not an ack."""
+
+    cmd: Literal["hello"]
+    client_id: str = Field(alias="clientId", min_length=8, max_length=64, pattern=r"^[\w-]+$")
+
+
+class ReleaseControlCmd(_Command):
+    id: int
+    cmd: Literal["release_control"]
+
+
 ClientCommand = Annotated[
-    SpawnAmbulanceCmd | DriveCmd | TurnCmd | LaneCmd | SetModeCmd | ResetCmd,
+    SpawnAmbulanceCmd
+    | DriveCmd
+    | TurnCmd
+    | LaneCmd
+    | SetModeCmd
+    | ResetCmd
+    | HelloCmd
+    | ReleaseControlCmd,
     Field(discriminator="cmd"),
 ]
 CLIENT_COMMAND: TypeAdapter[ClientCommand] = TypeAdapter(ClientCommand)
@@ -106,6 +126,8 @@ def to_engine_command(cmd: ClientCommand) -> Command:
             return SetMode(mode)
         case ResetCmd():
             return Reset()
+        case HelloCmd() | ReleaseControlCmd():
+            raise ValueError(f"'{cmd.cmd}' is a session command, not an engine command")
 
 
 # ---- backend -> frontend --------------------------------------------------------
@@ -123,6 +145,15 @@ class ErrorMsg(Message):
     v: Literal[1] = 1
     type: Literal["error"] = "error"
     reason: str
+
+
+class SessionMsg(Message):
+    """Sent to a client on connect, on hello and whenever the driver changes."""
+
+    v: Literal[1] = 1
+    type: Literal["session"] = "session"
+    client_id: str  # how the server knows this client (its hello id, or a server id)
+    role: Literal["driver", "observer", "free"]  # free: nobody drives; dispatch to take control
 
 
 class VehicleMsg(Message):
@@ -336,3 +367,8 @@ class HealthMsg(Message):
     error: str | None = None
     seq: int | None = None
     t: float | None = None
+    vehicles: int = 0
+    tick_ms_p50: float | None = None  # engine tick, last 30 s (budget: 100 ms at 10 Hz)
+    tick_ms_p95: float | None = None
+    tick_ms_max: float | None = None
+    sumo_step_ms_p50: float | None = None

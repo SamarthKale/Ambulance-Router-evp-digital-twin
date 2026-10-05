@@ -111,7 +111,30 @@ export interface ErrorMsg {
   reason: string;
 }
 
-export type ServerMsg = StateMsg | AckMsg | ErrorMsg;
+/** Driver lock: one screen drives, the others observe. "free": nobody drives yet. */
+export type SessionRole = "driver" | "observer" | "free";
+
+export interface SessionMsg {
+  v: 1;
+  type: "session";
+  clientId: string;
+  role: SessionRole;
+}
+
+export type ServerMsg = StateMsg | AckMsg | ErrorMsg | SessionMsg;
+
+// ---- GET /api/health -------------------------------------------------------------
+export interface HealthMsg {
+  status: "starting" | "running" | "error";
+  error: string | null;
+  seq: number | null;
+  t: number | null;
+  vehicles: number;
+  tickMsP50: number | null;
+  tickMsP95: number | null;
+  tickMsMax: number | null;
+  sumoStepMsP50: number | null;
+}
 
 // ---- GET /api/network ------------------------------------------------------------
 export interface LaneMsg {
@@ -166,7 +189,9 @@ export type Command =
   | { v: 1; id: number; cmd: "turn"; vehicle: string; direction: Direction }
   | { v: 1; id: number; cmd: "lane"; vehicle: string; direction: Direction }
   | { v: 1; id: number; cmd: "set_mode"; mode: SignalMode }
-  | { v: 1; id: number; cmd: "reset" };
+  | { v: 1; id: number; cmd: "reset" }
+  | { v: 1; cmd: "hello"; clientId: string }
+  | { v: 1; id: number; cmd: "release_control" };
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** A command before the socket stamps the protocol version and id. */
@@ -187,6 +212,9 @@ export interface DriveKeys {
 
 const LATENCY_SAMPLES = 20;
 const LATENCY_GIVE_UP_MS = 2000; // e.g. W pressed while waiting at a red light
+// A previous tick older than this (reconnect, hidden tab) is not interpolated from:
+// vehicles jump to their current position instead of sliding across the gap.
+const STALE_FRAME_MS = 500;
 
 export interface SimStore {
   connection: ConnectionStatus;
@@ -194,18 +222,21 @@ export interface SimStore {
   prev: Frame | null; // the two latest ticks, for interpolation
   curr: Frame | null;
   lastReply: AckMsg | ErrorMsg | null;
+  role: SessionRole; // driver lock, from the server's session messages
   keys: DriveKeys; // local key state, shown instantly in the HUD
   pendingInput: { at: number; speed: number } | null;
   latencyMs: number[]; // W press -> first tick in which the ambulance speeds up
   follow: boolean;
   fps: number;
+  drawCalls: number;
   setConnection: (connection: ConnectionStatus) => void;
   setNetwork: (network: NetworkMsg) => void;
   receiveState: (msg: StateMsg, now: number) => void;
   receiveReply: (msg: AckMsg | ErrorMsg) => void;
+  receiveSession: (msg: SessionMsg) => void;
   setKeys: (keys: DriveKeys, now: number) => void;
   toggleFollow: () => void;
-  setFps: (fps: number) => void;
+  setRenderStats: (fps: number, drawCalls: number) => void;
 }
 
 export function ambulanceOf(msg: StateMsg | undefined): VehicleMsg | undefined {
@@ -218,19 +249,23 @@ export const useSim = create<SimStore>()((set, get) => ({
   prev: null,
   curr: null,
   lastReply: null,
+  role: "free",
   keys: { throttle: false, brake: false },
   pendingInput: null,
   latencyMs: [],
   follow: true,
   fps: 0,
+  drawCalls: 0,
 
   setConnection: (connection) => set({ connection }),
   setNetwork: (network) => set({ network }),
 
   receiveState: (msg, now) => {
     const { curr, pendingInput, latencyMs } = get();
-    // A simulation reset makes time jump back: start interpolation afresh.
-    const prev = curr && msg.t >= curr.msg.t ? curr : null;
+    // A simulation reset makes time jump back, and a reconnect leaves a gap: in both
+    // cases start interpolation afresh rather than sliding from a stale position.
+    const fresh = curr !== null && now - curr.receivedAt <= STALE_FRAME_MS;
+    const prev = curr && fresh && msg.t >= curr.msg.t ? curr : null;
     let pending = pendingInput;
     let samples = latencyMs;
     if (pending) {
@@ -246,6 +281,7 @@ export const useSim = create<SimStore>()((set, get) => ({
   },
 
   receiveReply: (msg) => set({ lastReply: msg }),
+  receiveSession: (msg) => set({ role: msg.role }),
 
   setKeys: (keys, now) => {
     const { keys: old, curr } = get();
@@ -259,7 +295,7 @@ export const useSim = create<SimStore>()((set, get) => ({
   },
 
   toggleFollow: () => set({ follow: !get().follow }),
-  setFps: (fps) => set({ fps }),
+  setRenderStats: (fps, drawCalls) => set({ fps, drawCalls }),
 }));
 
 export function median(values: number[]): number | null {

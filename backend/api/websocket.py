@@ -1,24 +1,28 @@
-"""WebSocket endpoint: commands in; state ticks and acks out (protocol v1)."""
+"""WebSocket endpoint: commands in; state ticks, acks and session messages out (protocol v1)."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from collections import deque
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
+from api.channel import Broadcaster, ClientChannel
 from api.protocol import (
     CLIENT_COMMAND,
     AckMsg,
     DriveCmd,
     ErrorMsg,
-    state_message,
+    HelloCmd,
+    ReleaseControlCmd,
+    ResetCmd,
+    SpawnAmbulanceCmd,
     to_engine_command,
 )
-from simulation.engine import EngineState, SimulationEngine
+from api.session import SessionManager
+from simulation.engine import SimulationEngine
 from simulation.manual_control import CommandResult
 from simulation.vehicle import AMBULANCE_ID
 
@@ -26,73 +30,27 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 COMMAND_TIMEOUT_S = 2.0
-
-
-class ClientChannel:
-    """Outgoing messages for one client. Every ack is delivered, but only the newest
-    state tick: a slow client skips ticks instead of falling further behind."""
-
-    def __init__(self) -> None:
-        self._acks: deque[str] = deque()
-        self._tick: str | None = None
-        self._wakeup = asyncio.Event()
-
-    def push_ack(self, text: str) -> None:
-        self._acks.append(text)
-        self._wakeup.set()
-
-    def push_tick(self, text: str) -> None:
-        self._tick = text
-        self._wakeup.set()
-
-    async def next_batch(self) -> list[str]:
-        await self._wakeup.wait()
-        self._wakeup.clear()
-        batch = list(self._acks)
-        self._acks.clear()
-        if self._tick is not None:
-            batch.append(self._tick)
-            self._tick = None
-        return batch
-
-
-class Broadcaster:
-    """Fans engine states out to clients. publish() runs on the event loop thread."""
-
-    def __init__(self) -> None:
-        self._clients: set[ClientChannel] = set()
-
-    def register(self) -> ClientChannel:
-        channel = ClientChannel()
-        self._clients.add(channel)
-        return channel
-
-    def unregister(self, channel: ClientChannel) -> None:
-        self._clients.discard(channel)
-
-    def publish(self, state: EngineState) -> None:
-        if not self._clients:
-            return
-        text = state_message(state).model_dump_json()  # serialised once for all clients
-        for channel in self._clients:
-            channel.push_tick(text)
+OBSERVER_REASON = "observer: another screen is driving"
 
 
 @router.websocket("/ws")
 async def state_socket(ws: WebSocket) -> None:
     engine: SimulationEngine = ws.app.state.engine
     broadcaster: Broadcaster = ws.app.state.broadcaster
+    session: SessionManager = ws.app.state.session
     await ws.accept()
     channel = broadcaster.register()
+    session.connect(channel)
     sender = asyncio.create_task(_send_loop(ws, channel))
     pending: set[asyncio.Task[None]] = set()
     try:
         while True:
-            handle_message(engine, channel, await ws.receive_text(), pending)
+            handle_message(engine, session, channel, await ws.receive_text(), pending)
     except WebSocketDisconnect:
         pass
     finally:
         broadcaster.unregister(channel)
+        session.disconnect(channel)
         sender.cancel()
         for task in pending:
             task.cancel()
@@ -107,10 +65,19 @@ async def _send_loop(ws: WebSocket, channel: ClientChannel) -> None:
         pass  # client went away; the receive loop cleans up
 
 
+def _ack(channel: ClientChannel, command_id: int, ok: bool, reason: str) -> None:
+    channel.push_ack(AckMsg(id=command_id, ok=ok, reason=reason).model_dump_json())
+
+
 def handle_message(
-    engine: SimulationEngine, channel: ClientChannel, text: str, pending: set[asyncio.Task[None]]
+    engine: SimulationEngine,
+    session: SessionManager,
+    channel: ClientChannel,
+    text: str,
+    pending: set[asyncio.Task[None]],
 ) -> None:
-    """Validate and submit in arrival order; acks are sent when the engine has run them."""
+    """Validate, apply the driver lock, and submit in arrival order. Acks are sent once the
+    engine has run the command."""
     try:
         raw = json.loads(text)
     except json.JSONDecodeError:
@@ -132,24 +99,42 @@ def handle_message(
         channel.push_ack(reply.model_dump_json())
         return
 
+    me = session.client_id(channel)
+    if isinstance(cmd, HelloCmd):
+        session.hello(channel, cmd.client_id)  # replies with a session message
+        return
+    if isinstance(cmd, ReleaseControlCmd):
+        if session.driver == me:
+            session.release("released by the driver")
+            _ack(channel, cmd.id, True, "control released")
+        else:
+            _ack(channel, cmd.id, False, "you are not driving")
+        return
+
     vehicle = getattr(cmd, "vehicle", AMBULANCE_ID)
-    if isinstance(cmd, DriveCmd):
-        if vehicle == AMBULANCE_ID:
-            engine.submit(to_engine_command(cmd))  # fire and forget, no ack
+    if not session.may_control(me):
+        if not isinstance(cmd, DriveCmd):  # observers' drive heartbeats are dropped silently
+            _ack(channel, cmd.id, False, OBSERVER_REASON)
         return
     if vehicle != AMBULANCE_ID:
-        reason = f"unknown vehicle '{vehicle}'"
-        channel.push_ack(AckMsg(id=cmd.id, ok=False, reason=reason).model_dump_json())
+        if not isinstance(cmd, DriveCmd):
+            _ack(channel, cmd.id, False, f"unknown vehicle '{vehicle}'")
         return
+    if isinstance(cmd, SpawnAmbulanceCmd):
+        session.claim(me)  # the first client to dispatch drives
+    elif isinstance(cmd, ResetCmd):
+        session.release("simulation reset")
     future = engine.submit(to_engine_command(cmd))  # submitted now, so order is preserved
+    if isinstance(cmd, DriveCmd):
+        return  # fire and forget, no ack
+    command = cmd
 
     async def ack_when_done() -> None:
         try:
             result = await asyncio.wait_for(asyncio.wrap_future(future), COMMAND_TIMEOUT_S)
         except TimeoutError:
             result = CommandResult(False, "simulation not responding")
-        reply = AckMsg(id=cmd.id, ok=result.ok, reason=result.reason)
-        channel.push_ack(reply.model_dump_json())
+        _ack(channel, command.id, result.ok, result.reason)
 
     task = asyncio.create_task(ack_when_done())
     pending.add(task)

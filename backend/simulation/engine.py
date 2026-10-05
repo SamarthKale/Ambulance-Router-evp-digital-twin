@@ -16,6 +16,7 @@ import logging
 import queue
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ RESTART_DELAY_S = 1.0  # after a crash, wait this long before restarting SUMO
 # the loop resyncs to the wall clock instead of bursting ticks, so motion stays smooth.
 MAX_LAG_S = STEP_LENGTH
 RECENT_EVENTS = 8
+STATS_WINDOW = 300  # ticks (30 s) for the timing percentiles
 
 Mode = Literal["OFF", "BASIC", "COORD"]
 Rule = Callable[[AmbulanceView | None, Iterable[str]], list[RuleAction]]
@@ -87,6 +89,21 @@ class SafetyStatus:
 
 
 @dataclass(frozen=True)
+class EngineStats:
+    tick_ms_p50: float | None  # whole engine tick: commands, control, SUMO step, safety
+    tick_ms_p95: float | None
+    tick_ms_max: float | None
+    sumo_step_ms_p50: float | None  # simulationStep + subscription replies only
+    vehicles: int
+
+
+def _percentile(sorted_values: list[float], q: float) -> float | None:
+    if not sorted_values:
+        return None
+    return round(sorted_values[min(len(sorted_values) - 1, int(q * len(sorted_values)))], 2)
+
+
+@dataclass(frozen=True)
 class EngineState:
     seq: int
     mode: Mode
@@ -105,8 +122,10 @@ class SimulationEngine:
         deadman_s: float | None = DEADMAN_S,
         mode: Mode = "OFF",
         rule: Rule = basic_preemption,
+        warmup_s: float = 0.0,  # fast-forward this much simulated time on open (live demo)
     ) -> None:
         self.config = config
+        self.warmup_s = warmup_s
         self.network = RoadNetwork(config.scenario)
         self.tables = load_signal_tables(config.net_path)
         self.realtime = realtime
@@ -131,8 +150,22 @@ class SimulationEngine:
         self._latest: EngineState | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._tick_ms: deque[float] = deque(maxlen=STATS_WINDOW)
+        self._step_ms: deque[float] = deque(maxlen=STATS_WINDOW)
 
     # ---- any thread ----------------------------------------------------------
+    def stats(self) -> EngineStats:
+        """Tick timing over the last STATS_WINDOW ticks (copied, so any thread may call)."""
+        ticks, steps = sorted(self._tick_ms), sorted(self._step_ms)
+        latest = self._latest
+        return EngineStats(
+            tick_ms_p50=_percentile(ticks, 0.5),
+            tick_ms_p95=_percentile(ticks, 0.95),
+            tick_ms_max=ticks[-1] if ticks else None,
+            sumo_step_ms_p50=_percentile(steps, 0.5),
+            vehicles=latest.snapshot.vehicle_count if latest else 0,
+        )
+
     def submit(self, command: Command) -> Future[CommandResult]:
         """Queue a command for the simulation thread; the future resolves after it ran."""
         future: Future[CommandResult] = Future()
@@ -177,6 +210,10 @@ class SimulationEngine:
         self._collisions = 0
         self._now = self._sim.snapshot().time
         self._ambulance_class = None
+        while self._now < self.warmup_s - STEP_LENGTH / 2:  # traffic already on the roads
+            snap = self._sim.step()
+            self._collisions += snap.collisions
+            self._now = snap.time
 
     def close(self) -> None:
         if self._sim is not None:
@@ -186,11 +223,14 @@ class SimulationEngine:
         self._lights = None
 
     def tick(self) -> EngineState:
+        started = time.perf_counter()
         self._apply_commands()
         sim, manual, lights = self._require()
         manual.step(STEP_LENGTH)
         lights.apply(self._controller.step(self._now))
+        step_started = time.perf_counter()
         snap = sim.step()
+        self._step_ms.append((time.perf_counter() - step_started) * 1000)
         vehicle = snap.vehicle(AMBULANCE_ID)
         manual.observe(vehicle, snap.time)
         ambulance = manual.status(snap.time)
@@ -201,6 +241,7 @@ class SimulationEngine:
         self._now = snap.time
         state = EngineState(next(self._seq), self.mode, snap, ambulance, self._safety_status())
         self._latest = state
+        self._tick_ms.append((time.perf_counter() - started) * 1000)
         return state
 
     def _run_rule(

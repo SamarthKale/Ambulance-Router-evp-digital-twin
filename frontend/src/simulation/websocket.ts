@@ -1,4 +1,4 @@
-/** WebSocket client: reconnects automatically, stamps commands, feeds the store. */
+/** WebSocket client: reconnects automatically, identifies the tab, stamps commands, feeds the store. */
 import {
   PROTOCOL_VERSION,
   useSim,
@@ -10,6 +10,7 @@ import {
 
 const RETRY_MIN_MS = 250;
 const RETRY_MAX_MS = 2000;
+const CLIENT_ID_KEY = "emergencyflow.clientId";
 
 export function socketUrl(): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -22,6 +23,24 @@ export async function fetchNetwork(): Promise<NetworkMsg> {
   return (await response.json()) as NetworkMsg;
 }
 
+/**
+ * Per-tab id sent in `hello`, so a tab that reconnects keeps the driver role.
+ * sessionStorage: survives reloads and reconnects, but two tabs are two clients.
+ */
+export function tabClientId(): string {
+  const fresh = `tab-${crypto.randomUUID()}`;
+  try {
+    const stored = sessionStorage.getItem(CLIENT_ID_KEY);
+    if (stored) return stored;
+    sessionStorage.setItem(CLIENT_ID_KEY, fresh);
+  } catch {
+    // storage blocked (private mode, sandbox): the id lasts for this page only
+  }
+  return fresh;
+}
+
+const SERVER_TYPES: ReadonlySet<string> = new Set(["state", "ack", "error", "session"]);
+
 /** Light runtime check: the backend is trusted, but a version mismatch must not render garbage. */
 export function parseServerMsg(text: string): ServerMsg | null {
   let data: unknown;
@@ -32,8 +51,7 @@ export function parseServerMsg(text: string): ServerMsg | null {
   }
   if (typeof data !== "object" || data === null) return null;
   const { v, type } = data as { v?: unknown; type?: unknown };
-  if (v !== PROTOCOL_VERSION) return null;
-  if (type !== "state" && type !== "ack" && type !== "error") return null;
+  if (v !== PROTOCOL_VERSION || typeof type !== "string" || !SERVER_TYPES.has(type)) return null;
   return data as ServerMsg;
 }
 
@@ -44,7 +62,10 @@ export class SimSocket {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
 
-  constructor(private readonly url: string) {}
+  constructor(
+    private readonly url: string,
+    private readonly clientId: string,
+  ) {}
 
   connect(): void {
     this.stopped = false;
@@ -53,6 +74,7 @@ export class SimSocket {
     this.ws = ws;
     ws.onopen = () => {
       this.retryMs = RETRY_MIN_MS;
+      this.send({ cmd: "hello", clientId: this.clientId }); // reclaims the driver role
       useSim.getState().setConnection("open");
     };
     ws.onmessage = (event: MessageEvent<string>) => {
@@ -60,6 +82,7 @@ export class SimSocket {
       if (!msg) return;
       const store = useSim.getState();
       if (msg.type === "state") store.receiveState(msg, performance.now());
+      else if (msg.type === "session") store.receiveSession(msg);
       else store.receiveReply(msg);
     };
     ws.onclose = () => {
@@ -77,7 +100,7 @@ export class SimSocket {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     const message: Command =
-      body.cmd === "drive"
+      body.cmd === "drive" || body.cmd === "hello"
         ? { v: PROTOCOL_VERSION, ...body }
         : { v: PROTOCOL_VERSION, id: this.nextId++, ...body };
     ws.send(JSON.stringify(message));
