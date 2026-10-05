@@ -23,12 +23,19 @@ from api.protocol import (
     AmbulanceMsg,
     ClientCommand,
     ErrorMsg,
+    GhostMsg,
+    GhostPoseMsg,
     HealthMsg,
     IncidentMsg,
     MetricsMsg,
     NetworkMsg,
     NextSignalMsg,
+    PairedMsg,
     PlannedTurnMsg,
+    ResultArmMsg,
+    ResultExperimentMsg,
+    ResultSafetyMsg,
+    ResultsMsg,
     RouteMsg,
     RouteTurnMsg,
     SafetyEventMsg,
@@ -71,6 +78,9 @@ ENUMS: dict[str, tuple[type[BaseModel], str]] = {
     "healthStatus": (HealthMsg, "status"),
     "routing": (RouteMsg, "routing"),
     "incidentType": (IncidentMsg, "type"),
+    "ghostPhase": (GhostMsg, "phase"),
+    "resultSignals": (ResultArmMsg, "signals"),
+    "signalProgram": (ResultExperimentMsg, "signal_program"),
 }
 
 
@@ -101,16 +111,33 @@ def server_examples() -> dict[str, tuple[str, Any]]:
         t=123.4,
         mode="BASIC",
         vehicles=[
-            VehicleMsg(id="ambulance_01", type="ambulance", x=421.4, y=193.2, angle=90.0,
-                       speed=16.8, edge="A0_B0", lane=1),
-            VehicleMsg(id="f_w0_e0.3", type="car_sedan", x=300.1, y=204.8, angle=90.0,
-                       speed=12.5, edge=":A0_13_0", lane=0),
-        ],  # fmt: skip
+            VehicleMsg(
+                id="ambulance_01",
+                type="ambulance",
+                x=421.4,
+                y=193.2,
+                angle=90.0,
+                speed=16.8,
+                edge="A0_B0",
+                lane=1,
+            ),
+            VehicleMsg(
+                id="f_w0_e0.3",
+                type="car_sedan",
+                x=300.1,
+                y=204.8,
+                angle=90.0,
+                speed=12.5,
+                edge=":A0_13_0",
+                lane=0,
+            ),
+        ],
         signals=[
-            SignalMsg(id="B0", state="rrrrrrrrrrrrGGGG", phase=0, preempted=True,
-                      control="preempted"),
+            SignalMsg(
+                id="B0", state="rrrrrrrrrrrrGGGG", phase=0, preempted=True, control="preempted"
+            ),
             SignalMsg(id="A0", state="GGGgrrrrGGGgrrrr", phase=0),
-        ],  # fmt: skip
+        ],
         ambulance=AmbulanceMsg(
             status="driving",
             throttle=1.0,
@@ -122,8 +149,10 @@ def server_examples() -> dict[str, tuple[str, Any]]:
         ),
         route=RouteMsg(
             edges=["A0_B0", "B0_B1", "B1_e1"],
-            turns=[RouteTurnMsg(junction="B0", turn="left", edge="B0_B1"),
-                   RouteTurnMsg(junction="B1", turn="right", edge="B1_e1")],
+            turns=[
+                RouteTurnMsg(junction="B0", turn="left", edge="B0_B1"),
+                RouteTurnMsg(junction="B1", turn="right", edge="B1_e1"),
+            ],
             eta=31.4,
             distance=512.0,
             follows=True,
@@ -136,22 +165,47 @@ def server_examples() -> dict[str, tuple[str, Any]]:
             compromised_by="A1_B1",
             eta_change=6.2,
             blocked_ahead=False,
-        ),  # fmt: skip
-        metrics=MetricsMsg(eta=31.4, signals_preempted=2, queue_cleared=1),
+        ),
+        metrics=MetricsMsg(eta=31.4, signals_preempted=2, queue_cleared=1, time_saved=12.3),
         safety=SafetyMsg(
             violations=0,
             collisions=0,
             events=[
-                SafetyEventMsg(t=18.4, junction="B0", vehicle="ambulance_01", action="preempt",
-                               accepted=True, reason="ETA 14.5 s: clearing B0 for A0_B0"),
-                SafetyEventMsg(t=19.0, junction="B1", vehicle=None, action="preempt",
-                               accepted=False, reason="unknown junction B1"),
+                SafetyEventMsg(
+                    t=18.4,
+                    junction="B0",
+                    vehicle="ambulance_01",
+                    action="preempt",
+                    accepted=True,
+                    reason="ETA 14.5 s: clearing B0 for A0_B0",
+                ),
+                SafetyEventMsg(
+                    t=19.0,
+                    junction="B1",
+                    vehicle=None,
+                    action="preempt",
+                    accepted=False,
+                    reason="unknown junction B1",
+                ),
             ],
-        ),  # fmt: skip
+        ),
         incidents=[
-            IncidentMsg(id="incident_1", type="accident", edge="A1_B1", lane=0, x=332.5,
-                        y=454.8, angle=90.0, since=120.0),
-        ],  # fmt: skip
+            IncidentMsg(
+                id="incident_1",
+                type="accident",
+                edge="A1_B1",
+                lane=0,
+                x=332.5,
+                y=454.8,
+                angle=90.0,
+                since=120.0,
+            ),
+        ],
+        ghost=GhostMsg(
+            phase="arrived",
+            pose=GhostPoseMsg(t=123.3, x=598.1, y=454.8, angle=90.0, speed=0.0, edge="B1_e1"),
+            mission_time=53.8,
+        ),
     )
     idle = StateMsg(
         seq=1,
@@ -171,6 +225,37 @@ def server_examples() -> dict[str, tuple[str, Any]]:
     health = HealthMsg(status="running", seq=10, t=1.0, vehicles=5, tick_ms_p50=2.1,
                        tick_ms_p95=4.0, tick_ms_max=6.3, sumo_step_ms_p50=1.9)  # fmt: skip
     idle_health = HealthMsg(status="starting")
+    safe = ResultSafetyMsg(violations=0, collisions=0, emergency_brakings=1, teleports=0)
+    results = ResultsMsg(
+        available=True,
+        generated_at="2026-10-05T18:00:00+00:00",
+        note="Autopilot batch runs (the live demo is driven manually). Rule-based, simulated.",
+        baseline="off_strict_static",
+        experiments=[
+            ResultExperimentMsg(
+                scenario="grid4x4", scale=1.5, seeds=[1, 2, 3], pairing_ok=True,
+                signal_program="tuned", cycle_s=35.2,
+                arms=[
+                    ResultArmMsg(
+                        arm="off_strict_static", label="OFF strict · static",
+                        signals="off_strict", routing="static", runs=3, valid=3,
+                        travel_mean=180.4, travel_ci=(160.2, 201.0), wait_mean=41.0,
+                        safety=safe, travel_vs_baseline=None, bg_delay_vs_baseline=None,
+                    ),
+                    ResultArmMsg(
+                        arm="coord_dynamic", label="COORD · dynamic", signals="coord",
+                        routing="dynamic", runs=3, valid=3, travel_mean=120.1,
+                        travel_ci=(110.0, 130.5), wait_mean=0.4, safety=safe,
+                        travel_vs_baseline=PairedMsg(n=3, mean_diff=-60.3,
+                                                     ci=(-80.1, -41.2), p=0.25),
+                        bg_delay_vs_baseline=PairedMsg(n=3, mean_diff=812.0,
+                                                       ci=(300.5, 1300.0), p=0.25),
+                    ),
+                ],
+            )
+        ],
+    )  # fmt: skip
+    no_results = ResultsMsg(available=False, note="no experiment results yet")
     return {
         "stateDriving": ("StateMsg", driving.model_dump(mode="json")),
         "stateIdle": ("StateMsg", idle.model_dump(mode="json")),
@@ -183,6 +268,8 @@ def server_examples() -> dict[str, tuple[str, Any]]:
         "network": ("NetworkMsg", network.model_dump(mode="json")),
         "health": ("HealthMsg", health.model_dump(mode="json")),
         "healthStarting": ("HealthMsg", idle_health.model_dump(mode="json")),
+        "results": ("ResultsMsg", results.model_dump(mode="json")),
+        "noResults": ("ResultsMsg", no_results.model_dump(mode="json")),
     }  # fmt: skip
 
 
@@ -198,6 +285,7 @@ def render() -> str:
         "  ErrorMsg,",
         "  HealthMsg,",
         "  NetworkMsg,",
+        "  ResultsMsg,",
         "  SessionMsg,",
         "  StateMsg,",
         '} from "./state";',

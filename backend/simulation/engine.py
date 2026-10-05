@@ -39,12 +39,19 @@ from ai.routing import (
 from ai.rules import AmbulanceView, Preempt, Release, RuleAction, basic_preemption
 from safety.controller import SafetyController, SafetyEvent, Stage, UnsafePlanError
 from safety.monitor import SafetyMonitor
+from simulation.ghost import GhostRun, GhostStatus
 from simulation.incidents import MIN_ROAD_M, Incident, IncidentError, Incidents
 from simulation.manual_control import DEADMAN_S, OK, CommandResult, ManualController
-from simulation.network import RoadNetwork
+from simulation.network import Mission, RoadNetwork
 from simulation.sumo import STEP_LENGTH, Snapshot, SumoConfig, SumoSimulation, VehicleState
 from simulation.traffic_lights import TrafficLights, load_signal_tables
-from simulation.vehicle import AMBULANCE_ID, AmbulanceStatus, Direction, spawn_ambulance
+from simulation.vehicle import (
+    AMBULANCE_ID,
+    AMBULANCE_TYPE,
+    AmbulanceStatus,
+    Direction,
+    spawn_ambulance,
+)
 
 log = logging.getLogger(__name__)
 
@@ -178,6 +185,8 @@ class EngineState:
     route: RouteStatus | None = None
     queues_cleared: int = 0  # this mission: queues discharged before the ambulance arrived
     incidents: tuple[Incident, ...] = ()
+    ghost: GhostStatus | None = None  # the OFF ghost of this mission (live server only)
+    time_saved_s: float | None = None  # ghost mission time minus this one, once both arrived
 
 
 class SimulationEngine:
@@ -194,15 +203,24 @@ class SimulationEngine:
         routing: Routing = "dynamic",
         control: Control = "manual",
         coord_rule: Callable[[], CoordRule] = CoordPreemption,  # a fresh rule per simulation
+        mission: Mission | None = None,  # batch experiments: own start and destination
+        ambulance_type: str = AMBULANCE_TYPE,  # batch experiments: a vType variant
+        ghost: bool = False,  # live server: replay each fresh mission in OFF (simulation/ghost.py)
     ) -> None:
         self.config = config
         self.warmup_s = warmup_s
         self.routing: Routing = routing
         self.control: Control = control
+        self.ambulance_type = ambulance_type
+        self.ghost_enabled = ghost
+        self._ghost: GhostRun | None = None
+        self._dispatches = 0
         self.network = RoadNetwork(config.scenario)
+        if mission is not None:
+            self.network = self.network.with_mission(mission)
         self.graph = self.network.road_graph()
         self._successors = self.graph.successors()
-        self.tables = load_signal_tables(config.net_path)
+        self.tables = load_signal_tables(config.net_path, config.signal_programs)
         self._programs = {tls: table.phases for tls, table in self.tables.items()}
         self._route: RoutePlan | None = None
         self._route_start = ""
@@ -283,8 +301,16 @@ class SimulationEngine:
             self._thread.join(timeout)
             self._thread = None
 
+    @property
+    def time(self) -> float:
+        """Simulation time of the last step (or of the end of the warm-up)."""
+        return self._now
+
     # ---- simulation thread (or a test driving the engine synchronously) ----------
     def open(self) -> None:
+        self._dispatches = 0
+        if self.ghost_enabled:  # warms up in its own process while this one does
+            self._ghost = GhostRun(self.config, self.warmup_s, self.routing)
         self._sim = SumoSimulation(self.config)
         self._sim.start()
         conn = self._sim.connection
@@ -310,6 +336,9 @@ class SimulationEngine:
             self._now = snap.time
 
     def close(self) -> None:
+        if self._ghost is not None:
+            self._ghost.stop()
+            self._ghost = None
         if self._sim is not None:
             self._sim.close()
         self._sim = None
@@ -338,6 +367,7 @@ class SimulationEngine:
         self._watch_queues(snap, vehicle)
         self._now = snap.time
         route = self._update_route(snap, vehicle, ambulance)
+        ghost, time_saved = self._follow_ghost(snap.time, ambulance)
         state = EngineState(
             next(self._seq),
             self.mode,
@@ -347,10 +377,34 @@ class SimulationEngine:
             route,
             self._queues_cleared,
             self._incidents.active if self._incidents is not None else (),
+            ghost,
+            time_saved,
         )
         self._latest = state
         self._tick_ms.append((time.perf_counter() - started) * 1000)
         return state
+
+    def _follow_ghost(
+        self, now: float, ambulance: AmbulanceStatus
+    ) -> tuple[GhostStatus | None, float | None]:
+        ghost = self._ghost
+        if ghost is None:
+            return None, None
+        ghost.advance(now)
+        if ambulance.status == "arrived":
+            ghost.finish()
+        status = ghost.status(now)
+        if status.phase == "shadowing":
+            return None, None
+        saved = None
+        if (
+            status.phase == "arrived"
+            and status.mission_time is not None
+            and ambulance.status == "arrived"
+            and ambulance.mission_time is not None
+        ):
+            saved = round(status.mission_time - ambulance.mission_time, 1)
+        return status, saved
 
     # ---- routing (advisory while driving manually; followed by the batch autopilot) -----
     def _update_route(
@@ -499,9 +553,13 @@ class SimulationEngine:
             return
         manual.set_drive(1.0, 0.0)
         plan = self._route
-        if plan is None or vehicle.edge != plan.edges[0] or len(plan.edges) < 2:
+        # Static routing keeps the whole dispatch plan: steer from where the ambulance is on it.
+        if plan is None or vehicle.edge not in plan.edges:
             return
-        target = plan.edges[1]
+        ahead = plan.edges[plan.edges.index(vehicle.edge) :]
+        if len(ahead) < 2:
+            return
+        target = ahead[1]
         planned = manual.planned
         if planned is not None and planned.edge == target:
             return
@@ -513,7 +571,7 @@ class SimulationEngine:
             self._ambulance_class,
             junction=self.graph.edges[vehicle.edge].to_node,
             current_edge=vehicle.edge,
-            route=plan.edges,
+            route=ahead,
             successors=self._successors,
             destination=self.network.hospital.edge,
         )
@@ -711,8 +769,18 @@ class SimulationEngine:
                 self.open()
                 return CommandResult(True, "simulation restarted")
             case SpawnAmbulance():
-                spawn_ambulance(sim.connection, self.network, f"ambulance_{next(self._route_ids)}")
+                route_id = f"ambulance_{next(self._route_ids)}"
+                spawn_ambulance(sim.connection, self.network, route_id, self.ambulance_type)
                 manual.on_spawned(self._now)
+                self._dispatches += 1
+                if self._ghost is not None:
+                    if self._dispatches == 1 and self._ghost.phase == "shadowing":
+                        self._ghost.dispatch(self._now)
+                    else:
+                        self._ghost.retire(
+                            "the OFF ghost replays the first dispatch after a reset only "
+                            "(press Reset, then Dispatch)"
+                        )
                 self._ambulance_class = None
                 self._queue_watch.clear()
                 self._queues_cleared = 0
@@ -731,6 +799,8 @@ class SimulationEngine:
             case ClearIncidents():
                 cleared = self._require_incidents().clear()
                 self._replan, self._compromise = True, None
+                if self._ghost is not None:
+                    self._ghost.clear_accidents(self._now)
                 if not cleared:
                     return CommandResult(True, "no accidents to clear")
                 return CommandResult(True, f"cleared {cleared} accident(s)")
@@ -749,6 +819,8 @@ class SimulationEngine:
         except IncidentError as exc:
             return CommandResult(False, str(exc))
         self._replan = True
+        if self._ghost is not None:  # the ghost meets the same accident at the same moment
+            self._ghost.accident(self._now, edge)
         where = f"accident on {edge}: lane {incident.lane} blocked"
         if route is None or edge not in route.edges:
             return CommandResult(True, where)

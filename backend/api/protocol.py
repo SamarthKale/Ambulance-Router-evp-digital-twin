@@ -24,6 +24,7 @@ from simulation.engine import (
     SpawnAmbulance,
     Turn,
 )
+from simulation.ghost import GhostStatus
 from simulation.incidents import Incident, is_wreck
 from simulation.vehicle import AMBULANCE_ID
 
@@ -260,7 +261,7 @@ class MetricsMsg(Message):
     # This mission: junctions whose waiting queue was gone before the ambulance got there
     # (preempted with a queue in front, crossed without stopping on that approach).
     queue_cleared: int | None = None
-    time_saved: float | None = None  # only ever measured (ghost run, Sprint 9)
+    time_saved: float | None = None  # s, measured: OFF ghost's mission time minus this one
 
 
 class SafetyEventMsg(Message):
@@ -289,6 +290,24 @@ class IncidentMsg(Message):
     since: float  # simulation time
 
 
+class GhostPoseMsg(Message):
+    t: float  # simulation time of this pose (at most the state's t)
+    x: float  # m, vehicle centre, SUMO coordinates
+    y: float
+    angle: float
+    speed: float
+    edge: str
+
+
+class GhostMsg(Message):
+    """The OFF ghost: the same mission replayed with normal signals and the autopilot."""
+
+    phase: Literal["driving", "arrived", "unavailable"]
+    pose: GhostPoseMsg | None = None
+    mission_time: float | None = None  # the ghost's, once it has arrived
+    reason: str = ""  # why there is no ghost for this mission
+
+
 class StateMsg(Message):
     v: Literal[1] = 1
     type: Literal["state"] = "state"
@@ -302,6 +321,7 @@ class StateMsg(Message):
     metrics: MetricsMsg = MetricsMsg()
     safety: SafetyMsg
     incidents: list[IncidentMsg] = []  # wrecks are drawn from here, not from vehicles
+    ghost: GhostMsg | None = None  # null before the dispatch (and without a ghost)
 
 
 def route_message(route: RouteStatus | None) -> RouteMsg | None:
@@ -323,6 +343,29 @@ def route_message(route: RouteStatus | None) -> RouteMsg | None:
         compromised_by=route.compromised_by,
         eta_change=route.eta_change_s,
         blocked_ahead=route.blocked_ahead,
+    )
+
+
+def ghost_message(ghost: GhostStatus | None) -> GhostMsg | None:
+    if ghost is None or ghost.phase == "shadowing":
+        return None
+    pose = ghost.pose
+    return GhostMsg(
+        phase=ghost.phase,
+        pose=(
+            GhostPoseMsg(
+                t=round(pose.t, 3),
+                x=round(pose.x, 2),
+                y=round(pose.y, 2),
+                angle=round(pose.angle, 1),
+                speed=round(pose.speed, 2),
+                edge=pose.edge,
+            )
+            if pose is not None
+            else None
+        ),
+        mission_time=None if ghost.mission_time is None else round(ghost.mission_time, 1),
+        reason=ghost.reason,
     )
 
 
@@ -351,6 +394,7 @@ def state_message(state: EngineState) -> StateMsg:
             eta=route.eta if route else None,
             signals_preempted=safety.signals_preempted,
             queue_cleared=state.queues_cleared if amb.status != "none" else None,
+            time_saved=state.time_saved_s,
         ),
         safety=SafetyMsg(
             violations=safety.violations,
@@ -418,6 +462,7 @@ def state_message(state: EngineState) -> StateMsg:
             mission_time=None if amb.mission_time is None else round(amb.mission_time, 1),
         ),
         incidents=[incident_message(i) for i in state.incidents],
+        ghost=ghost_message(state.ghost),
     )
 
 
@@ -468,6 +513,58 @@ class NetworkMsg(Message):
     signals: list[SignalLinksMsg]
     depot: PlaceMsg
     hospital: PlaceMsg
+
+
+# ---- GET /api/results (experiments/summary/summary.json, Sprint 9) -----------------------
+class PairedMsg(Message):
+    """An arm minus the baseline over the same seeds."""
+
+    n: int  # seed pairs used (pairs with an invalid run are excluded)
+    mean_diff: float | None
+    ci: tuple[float | None, float | None]  # 95 % bootstrap interval of the mean difference
+    p: float | None  # Wilcoxon signed-rank, two-sided, exact
+
+
+class ResultSafetyMsg(Message):
+    violations: int
+    collisions: int
+    emergency_brakings: int
+    teleports: int
+
+
+class ResultArmMsg(Message):
+    arm: str  # e.g. "basic_dynamic"
+    label: str
+    signals: Literal["off_strict", "off_realistic", "basic", "coord"]
+    routing: Literal["static", "dynamic"]
+    runs: int
+    valid: int
+    travel_mean: float | None  # s, valid runs
+    travel_ci: tuple[float | None, float | None]
+    wait_mean: float | None
+    safety: ResultSafetyMsg  # summed over the runs
+    travel_vs_baseline: PairedMsg | None  # null for the baseline itself
+    bg_delay_vs_baseline: PairedMsg | None  # background time loss, veh-s
+
+
+class ResultExperimentMsg(Message):
+    scenario: str
+    scale: float
+    seeds: list[int]
+    pairing_ok: bool  # every arm of a seed started from the same traffic
+    signal_program: Literal["tuned", "net"]
+    cycle_s: float | None  # mean cycle of the base signal program
+    arms: list[ResultArmMsg]
+
+
+class ResultsMsg(Message):
+    """Batch experiment results (autopilot runs), for the in-app comparison chart."""
+
+    available: bool  # false until scripts.run_experiments has written a summary
+    generated_at: str | None = None
+    note: str = ""
+    baseline: str = ""
+    experiments: list[ResultExperimentMsg] = []
 
 
 class HealthMsg(Message):

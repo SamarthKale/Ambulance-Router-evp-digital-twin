@@ -106,7 +106,7 @@ export interface MetricsMsg {
   eta: number | null; // s to the hospital along the suggested route
   signalsPreempted: number;
   queueCleared: number | null; // this mission: junctions whose queue was gone before arrival
-  timeSaved: number | null; // only ever measured (ghost run)
+  timeSaved: number | null; // s, measured: the OFF ghost's mission time minus this one
 }
 
 export interface SafetyEventMsg {
@@ -124,6 +124,25 @@ export interface SafetyMsg {
   events: SafetyEventMsg[]; // safety controller decisions, most recent last
 }
 
+export type GhostPhase = "driving" | "arrived" | "unavailable";
+
+export interface GhostPoseMsg {
+  t: number; // simulation time of this pose (at most the state's t)
+  x: number; // m, vehicle centre, SUMO coordinates
+  y: number;
+  angle: number;
+  speed: number;
+  edge: string;
+}
+
+/** The OFF ghost: the same mission replayed with normal signals and the autopilot. */
+export interface GhostMsg {
+  phase: GhostPhase;
+  pose: GhostPoseMsg | null;
+  missionTime: number | null; // the ghost's, once it has arrived
+  reason: string; // why there is no ghost for this mission
+}
+
 export interface StateMsg {
   v: 1;
   type: "state";
@@ -137,6 +156,7 @@ export interface StateMsg {
   metrics: MetricsMsg;
   safety: SafetyMsg;
   incidents: IncidentMsg[];
+  ghost: GhostMsg | null; // null before the dispatch (and without a ghost)
 }
 
 export interface AckMsg {
@@ -176,6 +196,58 @@ export interface HealthMsg {
   tickMsP95: number | null;
   tickMsMax: number | null;
   sumoStepMsP50: number | null;
+}
+
+// ---- GET /api/results (batch experiments, autopilot) ---------------------------------
+export type ResultSignals = "off_strict" | "off_realistic" | "basic" | "coord";
+export type SignalProgram = "tuned" | "net";
+
+/** An arm minus the baseline over the same seeds. */
+export interface PairedMsg {
+  n: number; // seed pairs used
+  meanDiff: number | null;
+  ci: [number | null, number | null]; // 95 % bootstrap interval of the mean difference
+  p: number | null; // Wilcoxon signed-rank, two-sided, exact
+}
+
+export interface ResultSafetyMsg {
+  violations: number;
+  collisions: number;
+  emergencyBrakings: number;
+  teleports: number;
+}
+
+export interface ResultArmMsg {
+  arm: string;
+  label: string;
+  signals: ResultSignals;
+  routing: Routing;
+  runs: number;
+  valid: number;
+  travelMean: number | null; // s
+  travelCi: [number | null, number | null];
+  waitMean: number | null;
+  safety: ResultSafetyMsg;
+  travelVsBaseline: PairedMsg | null;
+  bgDelayVsBaseline: PairedMsg | null; // background time loss, veh-s
+}
+
+export interface ResultExperimentMsg {
+  scenario: string;
+  scale: number;
+  seeds: number[];
+  pairingOk: boolean;
+  signalProgram: SignalProgram;
+  cycleS: number | null;
+  arms: ResultArmMsg[];
+}
+
+export interface ResultsMsg {
+  available: boolean;
+  generatedAt: string | null;
+  note: string;
+  baseline: string;
+  experiments: ResultExperimentMsg[];
 }
 
 // ---- GET /api/network ------------------------------------------------------------

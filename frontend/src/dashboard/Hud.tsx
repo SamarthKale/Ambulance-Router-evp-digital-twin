@@ -9,11 +9,13 @@ import { useAssetStore } from "../assets/loader";
 import { ASSET_KEYS } from "../assets/manifest";
 import { useSkyStore } from "../components/Sky";
 import { CONTROL_COLORS, signalColor } from "../components/vehicleStyles";
+import { GHOST_COLOR } from "../components/Ghost";
 import { TURN_ARROW } from "../components/RouteOverlay";
 import {
   ambulanceOf,
   median,
   useSim,
+  type GhostMsg,
   type NetworkMsg,
   type RouteMsg,
   type SignalMode,
@@ -30,6 +32,7 @@ interface HudProps {
   onRelease: () => void;
   onAccident: () => void;
   onClearAccidents: () => void;
+  onResults: () => void;
 }
 
 const ROLE_TEXT = {
@@ -62,7 +65,16 @@ const panelStyle = {
   right: { width: HUD_RIGHT_PX, right: HUD_MARGIN_PX },
 };
 
-export function Hud({ network, onDispatch, onReset, onMode, onRelease, onAccident, onClearAccidents }: HudProps) {
+export function Hud({
+  network,
+  onDispatch,
+  onReset,
+  onMode,
+  onRelease,
+  onAccident,
+  onClearAccidents,
+  onResults,
+}: HudProps) {
   const s = useSim(
     useShallow((st) => ({
       connection: st.connection,
@@ -168,6 +180,7 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease, onAcciden
           )}
           {vehicle && <div className="hud-row muted">{laneName}</div>}
           {msg?.route && <RouteCard route={msg.route} />}
+          {msg?.ghost && <GhostLine ghost={msg.ghost} timeSaved={msg.metrics.timeSaved} />}
         </section>
 
         {s.lastReply && (s.lastReply.type === "error" || !s.lastReply.ok || s.lastReply.reason) && (
@@ -196,6 +209,9 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease, onAcciden
           >
             Create accident
           </button>
+          <button onClick={onResults} title="Batch experiment results and this drive's time saved">
+            Results (R)
+          </button>
           {(msg?.incidents.length ?? 0) > 0 && (
             <button onClick={onClearAccidents} disabled={observer}>
               Clear accidents ({msg?.incidents.length})
@@ -203,7 +219,7 @@ export function Hud({ network, onDispatch, onReset, onMode, onRelease, onAcciden
           )}
         </div>
         <div className="muted small">
-          W/S speed · A/D turn at next junction · Q/E lane · input→response{" "}
+          W/S speed · A/D turn at next junction · Q/E lane · R results · input→response{" "}
           {latency === null ? "-" : `${latency.toFixed(0)} ms (n=${s.latencyMs.length})`}
         </div>
       </div>
@@ -273,6 +289,33 @@ function RouteCard({ route }: { route: RouteMsg }) {
         {route.routing} route · drive {route.drive.toFixed(0)} s · queues {route.queue.toFixed(0)} s · signals{" "}
         {route.signal.toFixed(0)} s
       </div>
+    </div>
+  );
+}
+
+/** The OFF ghost and, once both have arrived, the measured time saved against it. */
+function GhostLine({ ghost, timeSaved }: { ghost: GhostMsg; timeSaved: number | null }) {
+  if (ghost.phase === "unavailable") {
+    return <div className="ghost-line muted small">No OFF ghost: {ghost.reason}</div>;
+  }
+  return (
+    <div className="ghost-line">
+      <span className="dot" style={{ background: GHOST_COLOR }} />
+      {ghost.phase === "driving" ? (
+        <span>
+          OFF ghost on its way <span className="muted small">(normal signals, autopilot)</span>
+        </span>
+      ) : (
+        <span>
+          OFF ghost arrived in {ghost.missionTime?.toFixed(1)} s
+          {timeSaved != null && (
+            <strong className={timeSaved >= 0 ? "saved" : "lost"}>
+              {" "}
+              · {timeSaved >= 0 ? "saved" : "lost"} {Math.abs(timeSaved).toFixed(1)} s
+            </strong>
+          )}
+        </span>
+      )}
     </div>
   );
 }

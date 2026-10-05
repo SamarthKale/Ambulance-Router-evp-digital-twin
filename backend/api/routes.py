@@ -1,11 +1,20 @@
-"""HTTP routes: static network geometry and engine health."""
+"""HTTP routes: static network geometry, engine health and the batch experiment results."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+import json
+import logging
+from pathlib import Path
 
-from api.protocol import HealthMsg, NetworkMsg
+from fastapi import APIRouter, Request
+from pydantic import ValidationError
+
+from api.protocol import HealthMsg, NetworkMsg, ResultsMsg
 from simulation.engine import SimulationEngine
+from simulation.sumo import REPO_ROOT
+
+log = logging.getLogger(__name__)
+RESULTS = REPO_ROOT / "experiments" / "summary" / "summary.json"
 
 router = APIRouter(prefix="/api")
 
@@ -14,6 +23,21 @@ router = APIRouter(prefix="/api")
 def network(request: Request) -> NetworkMsg:
     msg: NetworkMsg = request.app.state.network
     return msg
+
+
+@router.get("/results")
+def results(request: Request) -> ResultsMsg:
+    """The experiment summary written by scripts.run_experiments (re-read on every request,
+    so a new batch shows up without restarting)."""
+    path: Path = getattr(request.app.state, "results_path", RESULTS)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return ResultsMsg.model_validate({"available": True, **data})
+    except FileNotFoundError:
+        return ResultsMsg(available=False, note="no experiment results yet")
+    except (OSError, ValueError, ValidationError) as exc:
+        log.warning("unreadable experiment summary %s: %s", path, exc)
+        return ResultsMsg(available=False, note=f"unreadable experiment summary: {exc}")
 
 
 @router.get("/health")

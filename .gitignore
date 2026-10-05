@@ -20,3 +20,6 @@ Thumbs.db
 .DS_Store
 .idea/
 .vscode/
+
+# Experiment raw outputs (SUMO logs, tripinfo); results and manifests are committed
+experiments/raw/

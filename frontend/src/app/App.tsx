@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { CityScene } from "../components/CityScene";
 import { SKY_COLOR } from "../components/Sky";
 import { Hud } from "../dashboard/Hud";
+import { Results } from "../dashboard/Results";
 import { useSim, type CommandBody } from "../simulation/state";
 import { useManualDrive } from "../simulation/useManualDrive";
 import { SimSocket, fetchNetwork, socketUrl, tabClientId } from "../simulation/websocket";
@@ -27,6 +28,7 @@ function Simulation() {
   const connection = useSim((s) => s.connection);
   const role = useSim((s) => s.role);
   const [error, setError] = useState<string | null>(null);
+  const [showResults, setShowResults] = useState(false);
   const socket = useRef<SimSocket | null>(null);
 
   useEffect(() => {
@@ -66,6 +68,7 @@ function Simulation() {
       if (e.repeat || target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (e.code === "KeyF") useSim.getState().toggleFollow();
       if (e.code === "KeyC") useSim.getState().cycleView();
+      if (e.code === "KeyR") setShowResults((open) => !open);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -85,7 +88,9 @@ function Simulation() {
         onRelease={() => send({ cmd: "release_control" })}
         onAccident={() => send({ cmd: "inject_incident", type: "accident" })}
         onClearAccidents={() => send({ cmd: "clear_incidents" })}
+        onResults={() => setShowResults((open) => !open)}
       />
+      {showResults && <Results onClose={() => setShowResults(false)} />}
       {error && <div className="banner">Backend not reachable: {error}</div>}
     </div>
   );

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
 from traci.connection import Connection
@@ -31,8 +32,10 @@ class TrafficLights:
                     self._conn.trafficlight.setPhase(tls_id, phase)  # starts with its full duration
 
 
-def load_signal_tables(net_path: Path) -> dict[str, SignalTable]:
+def load_signal_tables(net_path: Path, programs: Path | None = None) -> dict[str, SignalTable]:
     """Read conflicts (junction <request foes>), approaches and programs from net.xml.
+    `programs`: an additional file whose tlLogic programs replace the net's as the normal
+    programs (experiments run a program tuned for their demand; SUMO activates it too).
 
     Signal link indices are mapped to the junction's request indices through the
     connection's internal lane (`via`), whose position in the junction's `intLanes` is its
@@ -100,4 +103,15 @@ def load_signal_tables(net_path: Path) -> dict[str, SignalTable]:
             program_id=logic.get("programID", "0"),
             phases=phases,
         )
+    if programs is not None:
+        for logic in ET.parse(programs).getroot().iter("tlLogic"):
+            tls = logic.get("id", "")
+            phases = tuple(
+                (p.get("state", ""), float(p.get("duration", "0"))) for p in logic.iter("phase")
+            )
+            if tls not in tables or any(len(s) != len(tables[tls].foes) for s, _ in phases):
+                raise ValueError(f"{programs}: program for {tls} doesn't fit the network")
+            tables[tls] = replace(
+                tables[tls], program_id=logic.get("programID", "0"), phases=phases
+            )
     return tables
