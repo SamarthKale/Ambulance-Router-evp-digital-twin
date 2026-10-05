@@ -85,8 +85,8 @@ def test_switching_to_off_releases_the_junction(basic: SimulationEngine) -> None
     release = next(e for e in back.safety.events if e.action == "release")
     assert release.reason == "mode switched to OFF"
     assert back.safety.violations == 0
-    coord = command(basic, SetMode("COORD"))
-    assert not coord.ok and "Sprint 7" in coord.reason
+    coord = command(basic, SetMode("COORD"))  # available since Sprint 7
+    assert coord.ok and basic.mode == "COORD"
 
 
 def test_rule_failure_falls_back_to_normal_programs(tmp_path: Path) -> None:

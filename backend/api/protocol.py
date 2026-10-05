@@ -227,7 +227,9 @@ class RouteMsg(Message):
 class MetricsMsg(Message):
     eta: float | None = None  # s to the hospital along the suggested route
     signals_preempted: int = 0  # preemptions that reached green, since the simulation started
-    queue_cleared: int | None = None  # Sprint 7
+    # This mission: junctions whose waiting queue was gone before the ambulance got there
+    # (preempted with a queue in front, crossed without stopping on that approach).
+    queue_cleared: int | None = None
     time_saved: float | None = None  # only ever measured (ghost run, Sprint 9)
 
 
@@ -288,7 +290,9 @@ def state_message(state: EngineState) -> StateMsg:
         mode=state.mode,
         route=route,
         metrics=MetricsMsg(
-            eta=route.eta if route else None, signals_preempted=safety.signals_preempted
+            eta=route.eta if route else None,
+            signals_preempted=safety.signals_preempted,
+            queue_cleared=state.queues_cleared if amb.status != "none" else None,
         ),
         safety=SafetyMsg(
             violations=safety.violations,

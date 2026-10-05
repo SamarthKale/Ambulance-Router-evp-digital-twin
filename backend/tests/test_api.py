@@ -107,8 +107,10 @@ def test_basic_mode_preempts_over_the_websocket(client: TestClient) -> None:
             "ok": True,
             "reason": "BASIC mode",
         }
-        ws.send_json({"v": 1, "id": 2, "cmd": "set_mode", "mode": "COORD"})
-        assert "Sprint 7" in wait_for(ws, ack(2))["reason"]
+        ws.send_json({"v": 1, "id": 2, "cmd": "set_mode", "mode": "COORD"})  # since Sprint 7
+        assert wait_for(ws, ack(2))["reason"] == "COORD mode"
+        ws.send_json({"v": 1, "id": 9, "cmd": "set_mode", "mode": "BASIC"})
+        assert wait_for(ws, ack(9))["ok"] is True
         ws.send_json({"v": 1, "id": 3, "cmd": "spawn_ambulance"})
         wait_for(ws, ack(3))
         preempting = drive_until(

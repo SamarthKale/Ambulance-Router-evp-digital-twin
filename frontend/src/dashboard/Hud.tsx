@@ -38,9 +38,15 @@ const ROLE_TEXT = {
 
 const TURN_LABEL = { left: "LEFT", straight: "STRAIGHT", right: "RIGHT", uturn: "U-TURN" } as const;
 const MODES: { mode: SignalMode; title: string; ready: boolean }[] = [
-  { mode: "OFF", title: "Normal signals", ready: true },
-  { mode: "BASIC", title: "Rule-based preemption", ready: true },
-  { mode: "COORD", title: "Coordinated preemption (Sprint 7)", ready: false },
+  { mode: "OFF", title: "Normal fixed-time signals", ready: true },
+  { mode: "BASIC", title: "Rule-based preemption: the next signal turns green 15 s ahead", ready: true },
+  {
+    mode: "COORD",
+    title:
+      "Coordinated, rule-based: preempts early enough for the queue in front to clear, " +
+      "and prepares the next junctions on the suggested route",
+    ready: true,
+  },
 ];
 const VIEWS: { view: ViewMode; label: string; title: string }[] = [
   { view: "chase", label: "Chase", title: "Behind the ambulance (city overview while none is out)" },
@@ -245,7 +251,10 @@ function SafetyCard() {
           {safety?.violations ?? 0} violations · {safety?.collisions ?? 0} collisions
         </span>
       </div>
-      <div className="hud-row muted">signals preempted: {msg?.metrics.signalsPreempted ?? 0}</div>
+      <div className="hud-row muted">
+        signals preempted: {msg?.metrics.signalsPreempted ?? 0}
+        {msg?.metrics.queueCleared != null && <> · queues cleared ahead: {msg.metrics.queueCleared}</>}
+      </div>
       <ol className="log">
         {(safety?.events ?? [])
           .slice(-LOG_LINES)

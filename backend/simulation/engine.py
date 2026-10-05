@@ -18,12 +18,13 @@ import queue
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future
 from dataclasses import dataclass
 from itertools import count
 from typing import Literal
 
+from ai.coord import PREPARE_AHEAD, CoordPreemption, Upcoming
 from ai.routing import (
     Conditions,
     EdgeTraffic,
@@ -57,6 +58,9 @@ Mode = Literal["OFF", "BASIC", "COORD"]
 Routing = Literal["dynamic", "static"]  # live costs, or free-flow costs fixed at dispatch
 Control = Literal["manual", "autopilot"]  # autopilot: batch experiments only (section 14)
 Rule = Callable[[AmbulanceView | None, Iterable[str]], list[RuleAction]]
+CoordRule = Callable[
+    [AmbulanceView | None, Sequence[Upcoming], Iterable[str], float], list[RuleAction]
+]
 
 
 @dataclass(frozen=True)
@@ -117,6 +121,13 @@ def _percentile(sorted_values: list[float], q: float) -> float | None:
     return round(sorted_values[min(len(sorted_values) - 1, int(q * len(sorted_values)))], 2)
 
 
+@dataclass
+class _QueueWatch:
+    approach: str
+    queue: int  # vehicles halted in front of the ambulance when the preemption was accepted
+    stopped: bool = False  # the ambulance stopped on the approach anyway
+
+
 @dataclass(frozen=True)
 class RouteStatus:
     """The suggested route (advisory while driving manually) and how the ambulance stands."""
@@ -138,6 +149,7 @@ class EngineState:
     ambulance: AmbulanceStatus
     safety: SafetyStatus
     route: RouteStatus | None = None
+    queues_cleared: int = 0  # this mission: queues discharged before the ambulance arrived
 
 
 class SimulationEngine:
@@ -153,6 +165,7 @@ class SimulationEngine:
         warmup_s: float = 0.0,  # fast-forward this much simulated time on open (live demo)
         routing: Routing = "dynamic",
         control: Control = "manual",
+        coord_rule: Callable[[], CoordRule] = CoordPreemption,  # a fresh rule per simulation
     ) -> None:
         self.config = config
         self.warmup_s = warmup_s
@@ -165,6 +178,10 @@ class SimulationEngine:
         self._programs = {tls: table.phases for tls, table in self.tables.items()}
         self._route: RoutePlan | None = None
         self._route_start = ""
+        self._make_coord_rule = coord_rule
+        self._coord_rule = coord_rule()
+        self._queue_watch: dict[str, _QueueWatch] = {}
+        self._queues_cleared = 0
         self.realtime = realtime
         self.mode: Mode = mode
         self.error: str | None = None
@@ -248,6 +265,9 @@ class SimulationEngine:
         self._now = self._sim.snapshot().time
         self._ambulance_class = None
         self._route, self._route_start = None, ""
+        self._queue_watch.clear()
+        self._queues_cleared = 0
+        self._coord_rule = self._make_coord_rule()
         while self._now < self.warmup_s - STEP_LENGTH / 2:  # traffic already on the roads
             snap = self._sim.step()
             self._collisions += snap.collisions
@@ -279,12 +299,19 @@ class SimulationEngine:
         ambulance = manual.status(snap.time)
         self._monitor.observe(snap.time, ((s.tls_id, s.state) for s in snap.signals))
         self._collisions += snap.collisions
-        if self.mode == "BASIC":
+        if self.mode in ("BASIC", "COORD"):
             self._run_rule(snap, vehicle, ambulance)
+        self._watch_queues(snap, vehicle)
         self._now = snap.time
         route = self._update_route(snap, vehicle, ambulance)
         state = EngineState(
-            next(self._seq), self.mode, snap, ambulance, self._safety_status(), route
+            next(self._seq),
+            self.mode,
+            snap,
+            ambulance,
+            self._safety_status(),
+            route,
+            self._queues_cleared,
         )
         self._latest = state
         self._tick_ms.append((time.perf_counter() - started) * 1000)
@@ -428,11 +455,18 @@ class SimulationEngine:
         try:
             view = self._ambulance_view(vehicle, ambulance)
             states = {s.tls_id: s.state for s in snap.signals}
-            for action in self._rule(view, controller.held_for(AMBULANCE_ID)):
+            held = controller.held_for(AMBULANCE_ID)
+            if self.mode == "COORD":
+                upcoming = self._upcoming(snap, vehicle, ambulance) if view else []
+                actions = self._coord_rule(view, upcoming, held, snap.time)
+            else:
+                upcoming = []
+                actions = self._rule(view, held)
+            for action in actions:
                 match action:
-                    case Preempt(junction=junction, link_index=link, eta_s=eta):
+                    case Preempt(junction=junction, link_index=link, eta_s=eta, note=note):
                         vehicle_class = view.vehicle_class if view else ""
-                        controller.request_preempt(
+                        decision = controller.request_preempt(
                             snap.time,
                             junction,
                             link,
@@ -440,7 +474,10 @@ class SimulationEngine:
                             vehicle_class,
                             states[junction],
                             eta,
+                            note,
                         )
+                        if decision.code == "accepted":
+                            self._watch_queue(snap, vehicle, junction, upcoming)
                     case Release(junction=junction, reason=reason):
                         controller.request_release(snap.time, junction, AMBULANCE_ID, reason)
         except UnsafePlanError:
@@ -463,6 +500,7 @@ class SimulationEngine:
             sim, _, _ = self._require()
             self._ambulance_class = sim.connection.vehicle.getVehicleClass(AMBULANCE_ID)
         ns = ambulance.next_signal
+        road = self.network.net.getEdge(vehicle.edge) if not vehicle.edge.startswith(":") else None
         return AmbulanceView(
             vehicle_id=AMBULANCE_ID,
             vehicle_class=self._ambulance_class,
@@ -471,7 +509,99 @@ class SimulationEngine:
             next_junction=ns.junction if ns else None,
             next_link=ns.link_index if ns else None,
             next_distance=ns.distance if ns else None,
+            behind=road.getFromNode().getID() if road is not None else None,
         )
+
+    # ---- COORD inputs and the queue-cleared metric -------------------------------------
+    def _halted_ahead(self, snap: Snapshot, edge: str, vehicle: VehicleState | None) -> int:
+        state = snap.edges.get(edge)
+        if state is None:
+            return 0
+        own = vehicle is not None and vehicle.edge == edge and vehicle.speed < 0.1
+        return max(0, state.halting - int(own))
+
+    def _upcoming(
+        self, snap: Snapshot, vehicle: VehicleState | None, ambulance: AmbulanceStatus
+    ) -> list[Upcoming]:
+        """Signalised junctions ahead, nearest first, along the road graph: the suggested
+        route while the ambulance follows it, else its own plan for the next junction.
+
+        SUMO's next-signal reading only refines the nearest one (exact distance and lane
+        link): the ambulance's SUMO route holds just its road and the next, so inside a
+        junction SUMO knows no signal ahead at all."""
+        _, manual, _ = self._require()
+        if vehicle is None:
+            return []
+        inside = vehicle.edge.startswith(":")
+        current = manual.upcoming_edge if inside else vehicle.edge
+        graph = self.graph
+        if current is None or current not in graph.edges:
+            return []
+        route = self._latest.route if self._latest is not None else None
+        if route is not None and route.follows and route.edges[0] == current:
+            path: tuple[str, ...] = route.edges
+        elif ambulance.planned_turn is not None and not inside:
+            path = (current, ambulance.planned_turn.edge)
+        else:
+            path = (current,)
+        ns = ambulance.next_signal
+        pos = 0.0 if inside else manual.lane_position
+        distance = max(0.0, graph.edges[current].length - pos)
+        items: list[Upcoming] = []
+        for i, edge in enumerate(path[:-1]):
+            if i > 0:
+                into = graph.movement(path[i - 1], edge)
+                distance += (into.length if into else 0.0) + graph.edges[edge].length
+            move = graph.movement(edge, path[i + 1])
+            if move is None or move.tls is None or move.link_index is None:
+                continue
+            link, at = move.link_index, distance
+            if i == 0 and ns is not None and ns.junction == move.tls:
+                link, at = ns.link_index, ns.distance
+            items.append(
+                Upcoming(
+                    junction=move.tls,
+                    link_index=link,
+                    approach=edge,
+                    distance=at,
+                    queue=self._halted_ahead(snap, edge, vehicle),
+                    lanes=graph.edges[edge].lanes,
+                )
+            )
+            if len(items) >= PREPARE_AHEAD:
+                break
+        return items
+
+    def _watch_queue(
+        self,
+        snap: Snapshot,
+        vehicle: VehicleState | None,
+        junction: str,
+        upcoming: list[Upcoming],
+    ) -> None:
+        """A preemption was accepted: remember the queue in front of the ambulance there."""
+        known = next((u for u in upcoming if u.junction == junction), None)
+        if known is not None:
+            approach, queue = known.approach, known.queue
+        elif vehicle is not None and not vehicle.edge.startswith(":"):
+            approach, queue = vehicle.edge, self._halted_ahead(snap, vehicle.edge, vehicle)
+        else:
+            return
+        self._queue_watch[junction] = _QueueWatch(approach, queue)
+
+    def _watch_queues(self, snap: Snapshot, vehicle: VehicleState | None) -> None:
+        """Count junctions whose waiting queue was cleared before the ambulance got there:
+        it then crosses without stopping on that approach."""
+        if vehicle is None:
+            self._queue_watch.clear()
+            return
+        for junction, watch in list(self._queue_watch.items()):
+            if vehicle.edge == watch.approach and vehicle.speed < 0.1:
+                watch.stopped = True
+            if vehicle.edge.startswith(f":{junction}_"):
+                if watch.queue > 0 and not watch.stopped:
+                    self._queues_cleared += 1
+                del self._queue_watch[junction]
 
     def _safety_status(self) -> SafetyStatus:
         controller = self._controller
@@ -512,6 +642,8 @@ class SimulationEngine:
                 spawn_ambulance(sim.connection, self.network, f"ambulance_{next(self._route_ids)}")
                 manual.on_spawned(self._now)
                 self._ambulance_class = None
+                self._queue_watch.clear()
+                self._queues_cleared = 0
                 return CommandResult(True, "ambulance dispatched from the depot")
             case Drive(throttle=throttle, brake=brake):
                 manual.set_drive(throttle, brake)
@@ -524,8 +656,6 @@ class SimulationEngine:
                 return self._set_mode(mode)
 
     def _set_mode(self, mode: Mode) -> CommandResult:
-        if mode == "COORD":
-            return CommandResult(False, "COORD mode arrives in Sprint 7")
         if mode == self.mode:
             return CommandResult(True, f"already in {mode} mode")
         if mode == "OFF":

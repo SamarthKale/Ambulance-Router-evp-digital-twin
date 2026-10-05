@@ -93,6 +93,18 @@ def test_live_traffic_moves_the_route_to_the_other_side() -> None:
     assert plan is not None and plan.edges[1] == "B"
 
 
+def test_one_car_creeping_into_a_queue_does_not_slow_the_ambulance() -> None:
+    """Regression (Sprint 7): a single slow mover on a two-lane road once priced the road at
+    70 s and made a U-turn detour look faster; the queue itself is charged separately."""
+    graph = diamond()
+    creeping = {"A": EdgeTraffic(mean_speed=0.4, halting=4, vehicles=5)}  # 1 moving at ~2 m/s
+    plan = plan_route(graph, "S", 0.0, "D", 100.0, Conditions(0.0, "BASIC", creeping))
+    assert plan is not None and plan.edges[1] == "A"
+    crawling = {"A": EdgeTraffic(mean_speed=1.0, halting=2, vehicles=12)}  # 10 moving at ~1.2 m/s
+    jammed = plan_route(graph, "S", 0.0, "D", 100.0, Conditions(0.0, "BASIC", crawling))
+    assert jammed is not None and jammed.edges[1] == "B"
+
+
 def test_off_mode_avoids_a_long_red_but_preemption_ignores_it() -> None:
     graph = diamond()
     x_red = SignalClock(phase=3, next_switch=30.0, phases=PROGRAM)  # X link 0 red for a while
@@ -112,8 +124,9 @@ def test_queues_cost_two_seconds_per_vehicle_and_lane_in_off_mode() -> None:
     assert off is not None and off.queue_s == pytest.approx(10 / 2 * HEADWAY_S)
     basic = plan_route(graph, "S", 0.0, "D", 100.0, Conditions(0.0, "BASIC", queue, green))
     assert basic is not None and basic.queue_s == 1.0  # 10 s of queue, 9 s of head start
+    # COORD prices queues like BASIC: route choice must not depend on the signal mode
     coord = plan_route(graph, "S", 0.0, "D", 100.0, Conditions(0.0, "COORD", queue, green))
-    assert coord is not None and coord.queue_s == 0.0
+    assert coord is not None and coord.queue_s == basic.queue_s and coord.edges == basic.edges
 
 
 def test_closed_roads_are_avoided_and_no_way_means_no_route() -> None:

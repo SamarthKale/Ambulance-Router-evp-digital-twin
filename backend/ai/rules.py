@@ -26,6 +26,7 @@ class AmbulanceView:
     next_junction: str | None
     next_link: int | None
     next_distance: float | None  # m to the stop line
+    behind: str | None = None  # the junction the ambulance's current road starts at
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class Preempt:
     junction: str
     link_index: int
     eta_s: float
+    note: str = ""  # why now (COORD: queue and lead time), for the safety log
 
 
 @dataclass(frozen=True)
