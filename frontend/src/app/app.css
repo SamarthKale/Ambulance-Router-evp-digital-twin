@@ -273,6 +273,12 @@ button.primary:hover:not(:disabled) {
   font-size: 14px;
 }
 
+/* scrolling flex columns: items keep their size (an SVG chart would otherwise collapse) */
+.dashboard-page > *,
+.dash-results > * {
+  flex-shrink: 0;
+}
+
 .dash-header {
   display: flex;
   justify-content: space-between;

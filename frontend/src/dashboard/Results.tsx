@@ -84,7 +84,7 @@ export function ExperimentChart({
   const ticks = [0, max / 2, max];
   const byArm = new Map(experiment.arms.map((a) => [a.arm, a]));
   const violations = experiment.arms.reduce((t, a) => t + a.safety.violations, 0);
-  const crossesReds = experiment.arms.some((a) => a.signals === "off_realistic" && a.safety.collisions > 0);
+  const crossesReds = experiment.arms.some((a) => a.signals === "off_realistic" && (a.safety.ambulanceCollisions ?? a.safety.collisions) > 0);
   return (
     <>
       <div className="muted small">
@@ -132,7 +132,9 @@ export function ExperimentChart({
             <th>arm</th>
             <th>travel vs baseline (95 % CI)</th>
             <th>background delay vs baseline</th>
-            <th>collisions</th>
+            <th title="vehicles in SUMO collisions after the dispatch (collision events involving the ambulance)">
+              collisions (ambulance)
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -145,7 +147,10 @@ export function ExperimentChart({
                 </td>
                 <td>{b.arm === baseline ? "baseline" : formatPaired(arm.travelVsBaseline, "s")}</td>
                 <td>{b.arm === baseline ? "" : formatPaired(arm.bgDelayVsBaseline, "veh·s")}</td>
-                <td className={arm.safety.collisions > 0 ? "alarm-text" : ""}>{arm.safety.collisions}</td>
+                <td className={arm.safety.ambulanceCollisions ? "alarm-text" : ""}>
+                  {arm.safety.collisions}
+                  {arm.safety.ambulanceCollisions !== null && ` (${arm.safety.ambulanceCollisions})`}
+                </td>
               </tr>
             );
           })}
@@ -153,7 +158,8 @@ export function ExperimentChart({
       </table>
       <div className="muted small">
         Signal safety over all runs: {violations} violations (independent monitor). Collisions: vehicles in SUMO
-        collisions after the dispatch, per arm.
+        collisions after the dispatch, per arm; in brackets, collisions involving the ambulance (each run with a
+        collision rerun and checked). The rest are between background cars.
         {crossesReds && " OFF realistic crosses reds the way SUMO models it, without yielding to cross traffic."} Dashed
         bars: static routing.
       </div>

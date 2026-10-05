@@ -474,7 +474,8 @@ export const results = {
             "violations": 0,
             "collisions": 0,
             "emergencyBrakings": 1,
-            "teleports": 0
+            "teleports": 0,
+            "ambulanceCollisions": null
           },
           "travelVsBaseline": null,
           "bgDelayVsBaseline": null
@@ -496,7 +497,8 @@ export const results = {
             "violations": 0,
             "collisions": 0,
             "emergencyBrakings": 1,
-            "teleports": 0
+            "teleports": 0,
+            "ambulanceCollisions": null
           },
           "travelVsBaseline": {
             "n": 3,

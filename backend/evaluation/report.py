@@ -166,7 +166,22 @@ def _mean(values: Sequence[float]) -> float:
 
 
 # ---- summary for the app -----------------------------------------------------------------
-def summary(runs: pd.DataFrame, table: pd.DataFrame) -> dict[str, Any]:
+def ambulance_collisions(out: Path) -> dict[tuple[str, float, str], int] | None:
+    """Collision events naming the ambulance per (scenario, scale, arm), from
+    summary/collisions.csv (scripts.classify_collisions); None until it has been run."""
+    path = out / "summary" / "collisions.csv"
+    if not path.exists():
+        return None
+    table = pd.read_csv(path)
+    grouped = table.groupby(["scenario", "scale", "arm"])["ambulance_events"].sum()
+    return {(str(k[0]), float(k[1]), str(k[2])): int(v) for k, v in grouped.items()}
+
+
+def summary(
+    runs: pd.DataFrame,
+    table: pd.DataFrame,
+    classified: dict[tuple[str, float, str], int] | None = None,
+) -> dict[str, Any]:
     out: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "note": CHART_NOTE,
@@ -197,7 +212,15 @@ def summary(runs: pd.DataFrame, table: pd.DataFrame) -> dict[str, Any]:
                 "travel_mean": _num(_mean(travel)),
                 "travel_ci": [_num(low), _num(high)],
                 "wait_mean": _num(_mean([float(w) for w in valid["wait_s"]])),
-                "safety": {k: int(rows[k].sum()) for k in SAFETY},
+                "safety": {
+                    **{k: int(rows[k].sum()) for k in SAFETY},
+                    # None: not classified yet; runs without a collision count as 0
+                    "ambulance_collisions": (
+                        None
+                        if classified is None
+                        else classified.get((str(scenario), float(scale), arm), 0)
+                    ),
+                },
             }
             for metric, key in (
                 ("travel_s", "travel_vs_baseline"),
@@ -336,7 +359,7 @@ def write_report(out: Path) -> dict[str, Any]:
     folder.mkdir(parents=True, exist_ok=True)
     table = paired_table(runs)
     table.to_csv(folder / "paired.csv", index=False, float_format="%.4g")
-    data = summary(runs, table)
+    data = summary(runs, table, ambulance_collisions(out))
     (folder / "summary.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     for (scenario, scale), _ in runs.groupby(["scenario", "scale"]):
         tag = f"{scenario}_x{scale:g}"

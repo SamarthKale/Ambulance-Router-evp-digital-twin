@@ -77,7 +77,26 @@ def test_the_report_summary_is_served_in_camel_case(client: TestClient, tmp_path
     assert by_arm["basic_dynamic"]["bgDelayVsBaseline"]["meanDiff"] == pytest.approx(-830.0)
     assert by_arm["basic_dynamic"]["safety"] == {
         "violations": 0, "collisions": 0, "emergencyBrakings": 0, "teleports": 0,
+        "ambulanceCollisions": None,  # not classified yet
     }  # fmt: skip
+
+    # after scripts.classify_collisions: events naming the ambulance, summed per arm
+    (tmp_path / "experiments" / "summary" / "collisions.csv").write_text(
+        "\n".join(
+            [
+                "scenario,scale,seed,arm,collisions,events,ambulance_events",
+                "grid4x4,1.5,2,basic_dynamic,2,1,0",
+                "grid4x4,1.5,3,off_strict_static,4,2,1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    write_report(tmp_path / "experiments")
+    arms = client.get("/api/results").json()["experiments"][0]["arms"]
+    assert {a["arm"]: a["safety"]["ambulanceCollisions"] for a in arms} == {
+        BASELINE.id: 1,
+        "basic_dynamic": 0,
+    }
 
 
 def test_an_unreadable_summary_is_reported_not_raised(client: TestClient, tmp_path: Path) -> None:

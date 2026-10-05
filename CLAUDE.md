@@ -110,7 +110,8 @@ sparkathon26/                      (EmergencyFlow AI)
 │   │   │                          # poses.ts (per-frame interpolation), useManualDrive.ts (+ *.test.ts)
 │   │   ├── assets/                # manifest.ts, prepare.ts (bake + merge), loader.ts, names.ts,
 │   │   │                          # exr.ts + exrWorker.ts (skybox), AssetsPage.tsx (dev-only /assets)
-│   │   ├── dashboard/             # Hud.tsx, layout.ts (panel widths shared with the camera)
+│   │   ├── dashboard/             # Hud.tsx, layout.ts (panel widths shared with the camera),
+│   │   │                          # Results.tsx + resultsChart.ts (in-app chart, R), DashboardPage.tsx
 │   │   └── app/                   # App.tsx, app.css
 │   └── scripts/                   # deliveredModels.ts (Vite plugin: /models/ -> 3d_models/),
 │                                  # check-assets.ts (npm run check:assets) (+ *.test.ts)
@@ -158,7 +159,13 @@ Keep `prediction.py` out of the repo until post-v1.
 .\start.ps1               # backend + frontend, 4x4 at 1.5x, warm-up 120 s, OFF ghost; opens the browser
 .\start.ps1 -Prod         # production build served by vite preview (port 4173)
 ```
-`start.ps1` (PowerShell 5.1) checks SUMO, the venv, `node_modules`, Git LFS pointers and free ports. It starts uvicorn without `--reload` and Vite (dev or preview), waits for `/api/health` and the page, and stops both process trees on Ctrl+C or when either exits. Logs go to `logs\`. Options: `-Scenario`, `-Scale`, `-Seed`, `-Warmup`, `-NoGhost`, `-NoBrowser`, `-BackendPort`, `-FrontendPort`. Another backend port reaches Vite through `EF_BACKEND`.
+`start.ps1` (PowerShell 5.1) checks SUMO, the venv, `node_modules`, Git LFS pointers and free ports. It starts uvicorn without `--reload` and Vite (dev or preview), waits for `/api/health` and the page, and stops both process trees on Ctrl+C or when either exits. Logs go to `logs\`. Options: `-Scenario`, `-Scale`, `-Seed`, `-Warmup`, `-NoGhost`, `-NoBrowser`, `-BackendPort`, `-FrontendPort`, `-Lan`. Another backend port reaches Vite through `EF_BACKEND`.
+
+**Dashboard and LAN access:**
+- `/dashboard` (`frontend/src/dashboard/DashboardPage.tsx`) is a read-only page with no 3D: live tiles (simulation, ambulance, OFF ghost, safety), the controller log, and the batch results. It shows the `/api/results` chart per demand and the matplotlib PNGs from `GET /api/charts/<name>` (plain names from `experiments/summary/` only), refreshed every 30 s. It connects as an observer and never sends commands.
+- `start.ps1 -Lan` makes Vite listen on all addresses and prints the PC's network URLs. The backend stays on 127.0.0.1 behind Vite's proxy, so only the frontend port is exposed.
+- Windows blocks inbound connections on *Public* networks (the launcher warns): make the network Private or add a firewall rule for the port.
+- Pages opened by IP are not a secure context, so browser APIs limited to https/localhost (e.g. `crypto.randomUUID`) must not be used; tab ids use `crypto.getRandomValues` (tested).
 
 ### Backend
 ```powershell
@@ -176,6 +183,7 @@ cd backend
 .venv\Scripts\python.exe -m scripts.run_experiments --scales 1.5 --seeds 1-20 --error-bar 15    # all arms, paired
 .venv\Scripts\python.exe -m scripts.run_experiments --scales 0.75,1.0,2.0 --seeds 1-10        # demand sweep
 .venv\Scripts\python.exe -m scripts.run_experiments --report-only                            # charts from the CSVs
+.venv\Scripts\python.exe -m scripts.classify_collisions                                      # which collisions involve the ambulance
 .venv\Scripts\python.exe -m scripts.gen_contract                           # after ANY change to api/protocol.py or a scenario
 .venv\Scripts\python.exe ..\scenarios\build_grid.py                        # regenerate scenarios\grid2x2
 .venv\Scripts\python.exe ..\scenarios\build_grid.py --nx 4 --ny 4          # evaluation grid
@@ -237,7 +245,7 @@ cd ..\frontend; npm run test; npm run typecheck
   | 4x4 at 1.5x | ~480 | 7.8 / 11.4 ms | ~30 ms (p95 50 ms with the browser running) | 54 → 8 KB |
 
   - The budget is 100 ms (10 Hz). SUMO's own step is about 98% of the tick and JSON serialisation adds 1.3 ms, so the backend needs no optimisation.
-  - The 4x4 grid at 1.5x runs 1 h with 0 teleports and 0 collisions.
+  - The 4x4 grid at 1.5x runs 1 h with 0 teleports and 0 collisions on the net's own 74 s program. With the short cycles tuned for x2.0 demand (section 14), background cars occasionally collide at permissive turns in every arm (about one event per run).
   - SUMO reports a vehicle's front-bumper position; `sumo.py` converts it to the vehicle **centre** before anything else sees it.
 - **Traffic side:** left-hand traffic (India), via `netconvert --lefthand`. Lane 0 is the curb (left) lane and carries left + straight; lane 1 carries straight + right. The right turn crosses oncoming traffic and is permissive (`g`).
 - **Network (`scenarios/build_grid.py`):**
@@ -595,7 +603,7 @@ Replies:
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation, queue-cleared metric ✅ |
 | 8 | Accident injection + automatic reroute + "route compromised": wreck held in one lane in SUMO, incident props, accident penalty in routing, clear/reset ✅ |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run**; base signal program tuned per demand; `off_realistic` verified ✅ |
-| 10 | README, demo script hardening, one-command local launcher, final verification (local native Windows; no Docker, no CI/CD) |
+| 10 | README, demo script hardening, one-command local launcher, LAN dashboard (`/dashboard`, `start.ps1 -Lan`), final verification (local native Windows; no Docker, no CI/CD) ✅ |
 
 Post-v1 (do not start early): traffic prediction, RL, OSM real-city import, multi-emergency-vehicle coordination, trucks/buses with protected turn phases.
 
@@ -610,7 +618,7 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - `off_realistic`: the ambulance crosses a red at up to 20 km/h. It uses a copy of the ambulance vType with SUMO's junction-model parameters `jmDriveAfterRedTime=300` and `jmDriveRedSpeed=5.56`, loaded as an additional file, because TraCI rejects them per vehicle.
     - It still queues behind stopped cars: it only crosses once at the front.
     - SUMO's `bluelight` device (traffic giving way) was tried too. Without the sublane model it didn't shorten missions and stalled one (not arrived after 450 s), so it isn't used.
-    - Verified: 0 collisions on 6 seeds (4x4 at 1.5x); 0-2 reds crossed per mission.
+    - Measured (Sprint 9): faster than `off_strict`, but the ambulance was in a junction collision in 12 of 140 runs (22 events). SUMO's red-crossing model doesn't yield to cross traffic. On the net's 74 s program, a first 6-seed check had shown none.
   - `scripts/smoke_compare.py` stays as a one-seed smoke test.
 - **Base signal program:** all arms share one fixed-time program tuned for the demand by SUMO's `tlsCycleAdaptation.py` (Webster), so OFF is not a strawman (`evaluation/programs.py`, written to `experiments/programs/`).
   - The tool counts `<vehicle>` elements, while the demand is Poisson `<flow>`s. So one hour of demand (seed 42) is expanded with `--vehroute-output` first, and rerouted vehicles are flattened to their final route.
@@ -640,6 +648,14 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - Background-traffic delay: `bg_time_loss_s`, the total `tripinfo` timeLoss of every background vehicle, written with unfinished trips at the window's end. Plus `bg_max_wait_s`, the longest total wait of one vehicle, and `bg_halted_s`, halted vehicle-seconds in the window. Vehicles already on the road at dispatch carry losses from before it, identical in every arm of a seed, so only paired differences are reported. These are headline numbers, not footnotes.
   - Route changes (`route_changes`: the suggestion switched to a different route) and preemption count.
   - Safety: the monitor's violations, SUMO collisions in the window, and emergency brakings and teleports from the SUMO log after the dispatch. Must be 0 beyond the OFF baseline on the same seeds.
+- **Results (Sprint 9, 560 runs; the README has the tables):**
+  - **Coverage:** 40 seeds at x1.5 and 10 each at x0.75, x1.0 and x2.0. Pairing was verified everywhere; 1 run was excluded (not arrived) and none teleported.
+  - **Travel time vs baseline:** BASIC and COORD cut it at every demand (−44 / −60 / −103 / −113 to −119 s at x0.75 / 1.0 / 1.5 / 2.0, all p ≤ 0.002) to 84-99 s. They remove every red-light stop and cut the time for the queue ahead to clear from 5.4 s to 1.5 s.
+  - **Background time loss:** no significant change at any demand (within ±0.5 %).
+  - **COORD vs BASIC:** not significant at any demand (|difference| < 5 s, p ≥ 0.28). Tuned 28-36 s cycles leave short queues.
+  - **Dynamic vs static routing:** no significant gain without incidents.
+  - **`off_realistic`:** −17 to −34 s, with the ambulance collisions above.
+  - **Safety:** the monitor counted 0 violations in all runs. Ambulance-involved collisions: 0 in BASIC, COORD and OFF strict (`scripts/classify_collisions.py` reruns every run with a collision, all reproduced exactly). Background-only collisions occur mainly at x2.0, in all arms including the baseline.
 - **Data quality:** teleports are counted per run. A run with a teleport after the dispatch, or not arrived, is flagged `valid=false`, and pairs containing one are excluded (the report gives `n` and `excluded`).
 - **Statistics** (`evaluation/stats.py`): paired differences (arm minus reference) per scenario, demand and metric.
   - The 95 % confidence interval of the mean difference uses a percentile bootstrap (10,000 resamples, seeded).

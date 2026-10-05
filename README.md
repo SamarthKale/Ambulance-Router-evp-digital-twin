@@ -18,7 +18,18 @@ git lfs install; git lfs pull       # the team's 3D models
 ```
 
 `start.ps1` starts the backend (SUMO + API) and the frontend, waits until both answer, opens the browser and stops everything on **Ctrl+C**. Logs go to `logs\`.
-- **Options:** `-Scenario grid2x2`, `-Scale 1.0`, `-Seed 7`, `-Warmup 60`, `-NoGhost`, `-NoBrowser`, `-BackendPort` / `-FrontendPort`.
+- **Options:** `-Scenario grid2x2`, `-Scale 1.0`, `-Seed 7`, `-Warmup 60`, `-NoGhost`, `-NoBrowser`, `-BackendPort` / `-FrontendPort`, `-Lan`.
+
+### Dashboard on another PC
+
+`http://localhost:5173/dashboard` is a read-only dashboard: no 3D, so it opens on any PC or projector. It shows the live simulation, the ambulance, the OFF ghost and time saved, the safety counters and the safety controller's log, then the batch experiment results and charts (refreshed every 30 s). It only watches: it never sends a command.
+
+To open it from another PC on the same network:
+1. Start with `.\start.ps1 -Lan`. It prints this PC's addresses, e.g. `http://192.168.29.243:5173/dashboard`.
+2. Open that address on the other PC. The live 3D view works too (`http://192.168.29.243:5173/`), as an observer.
+3. **If it doesn't connect:** Windows blocks incoming connections on networks marked *Public*. Set the network to *Private* (Settings → Network → your Wi-Fi → Private), or allow the port once, in an admin PowerShell: `New-NetFirewallRule -DisplayName "EmergencyFlow 5173" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow`. The launcher warns when the network is Public.
+
+Only the frontend port is opened; the backend stays on 127.0.0.1 behind Vite's proxy.
 - **Production build:** `-Prod` builds the frontend and serves it with `vite preview` on port 4173.
 - **Script blocked by policy?** Run `powershell -ExecutionPolicy Bypass -File .\start.ps1`.
 
@@ -35,7 +46,7 @@ git lfs install; git lfs pull       # the team's 3D models
 | 7 | COORD: queue-aware preemption lead time + downstream junction preparation | done |
 | 8 | Accident injection + automatic reroute + "route compromised" | done |
 | 9 | Experiment runner (paired seeds, arms, demand sweep), charts, OFF ghost comparison run | done |
-| 10 | Demo hardening, one-command local launcher, final verification (local Windows; no Docker, no CI/CD) | next |
+| 10 | Demo hardening, one-command local launcher, LAN dashboard, final verification (local Windows; no Docker, no CI/CD) | done |
 
 ## Prerequisites (Windows)
 
@@ -255,9 +266,57 @@ BASIC       47.5       0.0     0       3         0          0          0        
 COORD       47.5       0.0     0       3         0          0          0          4889.3
 ```
 
-This is **one seed**: a smoke test, not evidence. The seeded multi-run evaluation is Sprint 9 (see "Evaluation" below).
+This is **one seed** on the network's own 74 s signals: a smoke test, not evidence. The seeded evaluation follows.
 - **The trade-off:** the ambulance gets there in about half the time, while the other traffic spends about 19–24 % more time stopped over the same 300 s window.
 - **COORD vs BASIC here:** COORD has no queues to clear on this light demand, so it matches BASIC.
+
+## Evaluation: batch experiments (results)
+
+All numbers are **autopilot batch runs**, never the manual live demo. 4x4 grid, 8 arms (signals x routing), the same seeded missions in every arm (random start, destination and dispatch time after a 300 s warm-up). Every arm of a seed starts from identical traffic, verified by a fingerprint. Each arm shares one fixed-time signal program tuned for the demand by SUMO's `tlsCycleAdaptation.py` (cycles of 28-36 s), so the baseline is not a strawman. The baseline is **OFF strict, static routing**: no priority, the ambulance waits at reds, and follows the route a map would give.
+
+560 runs in total: 40 seeds at demand x1.5, and 10 seeds each at x0.75, x1.0 and x2.0. One run was excluded (not arrived within the 600 s window), and 0 teleported.
+
+**Ambulance travel time, mean (s):**
+
+| Arm | x0.75 | x1.0 | x1.5 | x2.0 |
+|---|---|---|---|---|
+| OFF strict, static (baseline) | 133.8 | 153.6 | 197.1 | 212.4 |
+| OFF realistic (crosses reds slowly), static | 116.3 | 130.8 | 170.6 | 143.4 |
+| BASIC, static | 89.7 | 93.2 | 93.8 | 99.2 |
+| BASIC, dynamic | 84.3 | 91.4 | 95.9 | 93.6 |
+| COORD, static | 89.4 | 93.7 | 94.6 | 95.8 |
+| COORD, dynamic | 83.6 | 91.3 | 97.3 | 98.1 |
+
+**At demand x1.5 (40 paired seeds), against the baseline** (mean difference, 95 % confidence interval, Wilcoxon p):
+
+| Arm | Travel time | Waiting time | Red-light stops | Background time loss (of ~190,600 veh-s) |
+|---|---|---|---|---|
+| BASIC, static | −103.3 s [−121.9, −85.9], p < 0.001 | −56.4 s | −3.6 (to 0) | +60 veh-s [−1064, +1024], p = 0.33 |
+| COORD, static | −102.5 s [−121.2, −85.3], p < 0.001 | −56.4 s | −3.6 (to 0) | −184 veh-s [−1240, +805], p = 0.91 |
+| COORD, dynamic | −99.8 s [−118.1, −82.7], p < 0.001 | −56.0 s | −3.6 | +681 veh-s [−506, +1821], p = 0.17 |
+| OFF realistic, static | −26.5 s [−37.5, −16.7], p < 0.001 | −24.1 s | −1.1 | −89 veh-s, p = 0.38 |
+
+What the experiments show:
+- **Signal priority roughly halves the ambulance's travel time** at every demand: −44 s at x0.75, −60 s at x1.0, −103 s at x1.5 and −113 to −119 s at x2.0 (all p ≤ 0.002). The ambulance stops at no red light, and the time for the queue in front of it to clear drops from 5.4 s to 1.5 s per junction.
+- **Background traffic pays no measurable price:** the change in its total time loss is within ±0.5 % and never significant, at any demand. With short tuned cycles, the 4 s yellow, 2 s all-red and recovery cost cross traffic little.
+- **COORD is not better than BASIC here.** The paired difference is under 5 s at every demand, and never significant (p ≥ 0.28). The cycles tuned for the demand are 28-36 s, so the queues COORD clears early are short. On the network's own 74 s program, a 5-seed smoke test had COORD 2-8 s ahead.
+- **Live re-routing doesn't help without incidents:** with BASIC or COORD, dynamic and static routing differ by under 6 s, and the difference is never significant at x1.0 and above. Its value is the accident case: "Route compromised" and the way round.
+- **Crossing reds without priority is faster than waiting, but unsafe.** `off_realistic` saves 17-34 s. In 12 of its 140 runs the ambulance was in a junction collision: 22 events. SUMO's red-crossing model doesn't yield to cross traffic. Signal priority saves 2.5-4x as much time, with no ambulance collision at all.
+
+**Safety** (`experiments/summary/collisions.csv`, from `scripts.classify_collisions`: every run with a collision was rerun with SUMO's log kept, and all 32 reproduced exactly):
+- The independent monitor counted **0 signal violations in all 560 runs**.
+- **0 collisions involved the ambulance in BASIC, COORD or OFF strict** (420 runs).
+- The other collisions are between background cars at permissive turns. They happen almost only at x2.0, where the network is oversaturated, and in every arm, including the baseline (8 events in the baseline's 10 runs). At the demo's x1.5 there was one, in both OFF strict arms of the same seed.
+
+Reproduce (from `backend\`; about 2.5 h on 14 cores):
+
+```powershell
+.venv\Scripts\python.exe -m scripts.run_experiments --scales 1.5 --seeds 1-40
+.venv\Scripts\python.exe -m scripts.run_experiments --scales 0.75,1.0,2.0 --seeds 1-10
+.venv\Scripts\python.exe -m scripts.classify_collisions
+```
+
+The results are in `experiments/`: per-arm CSVs and a manifest per run, plus `summary/` (`paired.csv`, `summary.json`, `collisions.csv`, charts). They are also shown in the app (**R**) and on `/dashboard`. SUMO is CPU-only, so the runs use the processor; the GPU only draws the 3D view.
 
 ## Tests and lint
 
