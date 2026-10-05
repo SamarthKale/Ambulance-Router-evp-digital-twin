@@ -18,6 +18,12 @@ export default defineConfig({
       "/ws": { target: `ws://${BACKEND}`, ws: true },
     },
   },
+  optimizeDeps: {
+    // Imported only by the skybox Web Worker, which the start-up dependency scan doesn't
+    // follow. Undeclared, Vite discovers it ~10 s after the page opens, re-optimises and
+    // force-reloads the page, cutting the live WebSocket ("ws proxy error: ECONNRESET").
+    include: ["three/examples/jsm/loaders/EXRLoader.js"],
+  },
   build: {
     // one page served locally: three.js + React + drei is ~1.3 MB (350 KB gzipped), on purpose
     chunkSizeWarningLimit: 1600,

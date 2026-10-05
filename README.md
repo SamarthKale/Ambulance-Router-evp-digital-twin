@@ -239,6 +239,7 @@ Regenerate (from `backend\`):
 - **Leftover `sumo.exe`**: shouldn't happen. The backend owns the SUMO process and kills it on exit, and SUMO quits by itself if its client dies. Check with `Get-Process sumo`.
 - **Page says "Backend not reachable"**: start the backend first (terminal 1). `http://127.0.0.1:8000/api/health` should report `running`.
 - **Open `http://localhost:5173`, not `127.0.0.1:5173`**: Vite listens on `localhost`, which Windows resolves to IPv6 `::1`.
+- **`[vite] ws proxy error: ECONNRESET` in the frontend terminal:** the backend went away mid-connection, e.g. `uvicorn --reload` restarting after a backend file changed. The page reconnects on its own. Page loads and reloads themselves no longer log it: the socket opens only once under React StrictMode, and the skybox worker's dependency is pre-bundled, so Vite no longer force-reloads the page.
 - **Grey boxes instead of buildings and cars:** the model files are missing or are Git LFS pointers. Run `git lfs pull`, then `npm run check:assets` (it names each problem file).
 - **Low FPS:** check which GPU Edge uses (Windows Graphics settings above). The HUD shows FPS, draw calls and triangles.
 - **How long does live traffic last?** The live server generates background traffic for 24 h (`routes.live.rou.xml`). Experiments and tests use exactly 1 h (`routes.rou.xml`) so results stay comparable.
