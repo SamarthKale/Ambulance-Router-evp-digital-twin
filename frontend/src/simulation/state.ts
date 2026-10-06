@@ -252,6 +252,142 @@ export interface ResultsMsg {
   charts: string[]; // PNG charts, served at /api/charts/<name>
 }
 
+// ---- GET /api/replay/... (recorded experiment runs, Sprint 11) -------------------------
+export type ReplayRouting = Routing;
+
+/** One run's authoritative result: its row in experiments/<arm>/runs.csv (blank = null). */
+export interface ReplaySummaryMsg {
+  origin: string;
+  destination: string;
+  dispatchS: number | null;
+  tripM: number | null; // shortest route between origin and destination
+  arrived: boolean;
+  valid: boolean;
+  signalProgram: string;
+  cycleS: number | null;
+  travelS: number | null;
+  waitS: number | null;
+  stops: number | null;
+  redStops: number | null;
+  redCrossings: number | null;
+  approachClearS: number | null;
+  queueMean: number | null;
+  bgTimeLossS: number | null;
+  preemptions: number | null;
+  routeChanges: number | null;
+  violations: number | null; // independent monitor
+  collisions: number | null; // SUMO-reported, whole window, any vehicles
+  emergencyBrakings: number | null; // SUMO log after the dispatch, any vehicles
+  teleports: number | null;
+  ambulanceCollisions: number | null; // null: not classified
+}
+
+export interface ReplayIndexRunMsg {
+  id: string; // "<arm>/<run key>"
+  scenario: string;
+  scale: number;
+  seed: number;
+  arm: string;
+  strategy: ResultSignals;
+  routing: ReplayRouting;
+  summary: ReplaySummaryMsg;
+  telemetry: boolean; // a playback was recorded
+  matchesRecorded: boolean | null; // its re-run reproduced the runs.csv row
+  traffic: boolean; // the background traffic was recorded too
+  differences: string[];
+}
+
+export interface ReplayIndexMsg {
+  v: 1;
+  available: boolean;
+  note: string;
+  runs: ReplayIndexRunMsg[];
+}
+
+export interface ReplayRouteMsg {
+  t: number;
+  edges: string[];
+  eta: number;
+  routing: ReplayRouting;
+}
+
+export interface ReplaySignalsMsg {
+  ids: string[];
+  initial: string[];
+  initialControl: SignalControl[];
+  changes: [number, number, string, SignalControl][]; // [t, signal index, state, stage]
+}
+
+export interface ReplayEventMsg {
+  t: number;
+  kind: string;
+  junction: string | null;
+  edge: string | null;
+  text: string;
+  accepted: boolean | null;
+}
+
+export interface ReplayEdgeSampleMsg {
+  t: number;
+  halting: number[];
+  vehicles: number[];
+  speed: number[];
+}
+
+export interface ReplayEdgesMsg {
+  ids: string[];
+  intervalS: number;
+  samples: ReplayEdgeSampleMsg[];
+}
+
+export interface ReplayTrafficMsg {
+  intervalS: number;
+  ids: string[];
+  types: string[];
+  samples: [number, number[]][]; // [t, [id index, x, y, angle, ...]]
+}
+
+export interface ReplayVerificationMsg {
+  matchesRecorded: boolean;
+  checked: number;
+  differences: string[];
+}
+
+export interface ReplayProvenanceMsg {
+  gitSha: string;
+  gitDirty: boolean;
+  sumoVersion: string;
+  createdAt: string;
+}
+
+export interface ReplayRunMsg {
+  v: 1;
+  schemaVersion: number;
+  id: string;
+  scenario: string;
+  scale: number;
+  seed: number;
+  arm: string;
+  strategy: ResultSignals;
+  routing: ReplayRouting;
+  dispatchS: number;
+  durationS: number;
+  arrived: boolean;
+  missionTime: number | null;
+  ambulanceEdges: string[];
+  ambulance: [number, number, number, number, number, number, number][]; // t x y angle speed edge lane
+  status: [number, number | null, number | null, string | null, string | null][];
+  routes: ReplayRouteMsg[];
+  signals: ReplaySignalsMsg;
+  events: ReplayEventMsg[];
+  edges: ReplayEdgesMsg;
+  traffic: ReplayTrafficMsg | null;
+  incidents: IncidentMsg[];
+  summary: ReplaySummaryMsg | null;
+  verification: ReplayVerificationMsg;
+  recordedWith: ReplayProvenanceMsg;
+}
+
 // ---- GET /api/network ------------------------------------------------------------
 export interface LaneMsg {
   id: string;

@@ -32,6 +32,8 @@ from api.protocol import (
     NextSignalMsg,
     PairedMsg,
     PlannedTurnMsg,
+    ReplayIndexMsg,
+    ReplayRunMsg,
     ResultArmMsg,
     ResultExperimentMsg,
     ResultSafetyMsg,
@@ -102,6 +104,64 @@ def command_examples() -> list[dict[str, Any]]:
     for example in examples:
         CLIENT_COMMAND.validate_python(example)  # every example is valid backend input
     return examples
+
+
+def replay_examples() -> tuple[ReplayIndexMsg, ReplayRunMsg]:
+    """A tiny recorded run (what experiments/telemetry holds) and an index entry for it."""
+    summary = {
+        "origin": "w0_A0", "destination": "B1_e1", "dispatch_s": 310.0, "trip_m": 1051.8,
+        "arrived": True, "valid": True, "signal_program": "tuned", "cycle_s": 34.7,
+        "travel_s": 7.0, "wait_s": 0.0, "stops": 0, "red_stops": 0, "red_crossings": 0,
+        "approach_clear_s": None, "queue_mean": 0.5, "bg_time_loss_s": 100200.0,
+        "preemptions": 1, "route_changes": 0, "violations": 0, "collisions": 0,
+        "emergency_brakings": 1, "teleports": 0, "ambulance_collisions": None,
+    }  # fmt: skip
+    run = ReplayRunMsg.model_validate(
+        {
+            "v": 1, "schema_version": 1, "id": "basic_static/grid4x4_x1.5_seed001",
+            "scenario": "grid4x4", "scale": 1.5, "seed": 1, "arm": "basic_static",
+            "strategy": "basic", "routing": "static", "dispatch_s": 310.0, "duration_s": 12.0,
+            "arrived": True, "mission_time": 7.0, "ambulance_edges": ["w0_A0", "A0_B0"],
+            "ambulance": [
+                [0.0, 0.0, 204.8, 90.0, 0.0, 0, 0],
+                [7.0, 100.5, 204.8, 90.0, 15.2, 1, 1],
+            ],
+            "status": [[0.0, 7.0, 90.0, "A0", "r"], [7.0, None, None, None, None]],
+            "routes": [{"t": 0.0, "edges": ["w0_A0", "A0_B0"], "eta": 7.0, "routing": "static"}],
+            "signals": {
+                "ids": ["A0"], "initial": ["GGrr"], "initial_control": ["program"],
+                "changes": [[3.3, 0, "yyrr", "clearing"], [5.3, 0, "GGrr", "preempted"]],
+            },
+            "events": [
+                {"t": 0.0, "kind": "dispatch", "text": "ambulance dispatched"},
+                {"t": 3.3, "kind": "preempt", "junction": "A0", "accepted": True,
+                 "text": "ETA 14.7 s: clearing A0 for w0_A0 (yellow 4 s, all-red 2 s)"},
+            ],
+            "edges": {"ids": ["w0_A0"], "interval_s": 5.0,
+                      "samples": [{"t": 0.0, "halting": [0], "vehicles": [2], "speed": [9.5]}]},
+            "traffic": {"interval_s": 1.0, "ids": ["f_0.1"], "types": ["car_sedan"],
+                        "samples": [[0.0, [0, 12.5, 204.8, 90.0]]]},
+            "incidents": [], "summary": summary,
+            "verification": {"matches_recorded": True, "checked": 17, "differences": []},
+            "recorded_with": {"git_sha": "a" * 40, "git_dirty": False,
+                              "sumo_version": "Eclipse SUMO 1.27.1",
+                              "created_at": "2026-10-06T00:00:00+00:00"},
+        }
+    )  # fmt: skip
+    index = ReplayIndexMsg.model_validate(
+        {
+            "available": True,
+            "runs": [
+                {
+                    "id": run.id, "scenario": "grid4x4", "scale": 1.5, "seed": 1,
+                    "arm": "basic_static", "strategy": "basic", "routing": "static",
+                    "summary": summary, "telemetry": True, "matches_recorded": True,
+                    "traffic": True, "differences": [],
+                }
+            ],
+        }
+    )  # fmt: skip
+    return index, run
 
 
 def server_examples() -> dict[str, tuple[str, Any]]:
@@ -256,6 +316,7 @@ def server_examples() -> dict[str, tuple[str, Any]]:
         ],
     )  # fmt: skip
     no_results = ResultsMsg(available=False, note="no experiment results yet")
+    replay_index, replay_run = replay_examples()
     return {
         "stateDriving": ("StateMsg", driving.model_dump(mode="json")),
         "stateIdle": ("StateMsg", idle.model_dump(mode="json")),
@@ -270,6 +331,8 @@ def server_examples() -> dict[str, tuple[str, Any]]:
         "healthStarting": ("HealthMsg", idle_health.model_dump(mode="json")),
         "results": ("ResultsMsg", results.model_dump(mode="json")),
         "noResults": ("ResultsMsg", no_results.model_dump(mode="json")),
+        "replayIndex": ("ReplayIndexMsg", replay_index.model_dump(mode="json")),
+        "replayRun": ("ReplayRunMsg", replay_run.model_dump(mode="json")),
     }  # fmt: skip
 
 
@@ -285,6 +348,8 @@ def render() -> str:
         "  ErrorMsg,",
         "  HealthMsg,",
         "  NetworkMsg,",
+        "  ReplayIndexMsg,",
+        "  ReplayRunMsg,",
         "  ResultsMsg,",
         "  SessionMsg,",
         "  StateMsg,",
