@@ -81,7 +81,6 @@ def experiments(tmp_path: Path) -> Path:
     out = tmp_path / "experiments"
     rows = [fake_run(BASELINE, 1, 200.0), fake_run(BASIC, 1, 120.0), fake_run(BASIC, 2, 110.0)]
     rows[1]["travel_s"] = 7.0
-    rows[2]["ambulance_collisions"] = 1
     rows[2]["approach_clear_s"] = float("nan")
     save_runs(out, rows)
     write_telemetry(telemetry_path(out / "telemetry", BASIC.id, KEY), fake_telemetry())
@@ -104,9 +103,34 @@ def test_the_index_lists_every_run_and_marks_the_recorded_playbacks(
     assert recorded["summary"]["travelS"] == 7.0  # runs.csv is the authority
     other = by_id[f"basic_static/{run_key('grid4x4', 1.5, 2)}"]
     assert not other["telemetry"] and other["matchesRecorded"] is None and not other["traffic"]
-    assert other["summary"]["ambulanceCollisions"] == 1
     assert other["summary"]["approachClearS"] is None  # blank cell: null, never 0
-    assert by_id[f"off_strict_static/{KEY}"]["summary"]["ambulanceCollisions"] is None
+    assert by_id[f"off_strict_static/{KEY}"]["summary"]["ambulanceCollisions"] == 0
+
+
+def test_ambulance_collisions_come_from_the_classification(
+    client: TestClient, experiments: Path
+) -> None:
+    """A run with collisions is 'not classified' until scripts.classify_collisions names the
+    ambulance's events; a run SUMO saw no collision in has none."""
+    rows = [fake_run(BASIC, 3, 100.0), fake_run(BASIC, 4, 100.0), fake_run(BASIC, 5, 100.0)]
+    rows[0]["collisions"] = 3  # classified, the ambulance was involved
+    rows[1]["collisions"] = 2  # not classified
+    rows[2]["collisions"] = 1  # classified but did not reproduce: says nothing
+    save_runs(experiments, rows)
+    summary = experiments / "summary"
+    summary.mkdir(parents=True, exist_ok=True)
+    header = "scenario,scale,seed,arm,collisions,events,ambulance_events,red_crossings,travel_s"
+    lines = [
+        f"{header},reproduced",
+        "grid4x4,1.5,3,basic_static,3,2,2,0,100.0,True",
+        "grid4x4,1.5,5,basic_static,1,1,1,0,100.0,False",
+    ]
+    (summary / "collisions.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    runs = {r["id"]: r["summary"] for r in client.get("/api/replay/index").json()["runs"]}
+    assert runs[f"basic_static/{run_key('grid4x4', 1.5, 3)}"]["ambulanceCollisions"] == 2
+    assert runs[f"basic_static/{run_key('grid4x4', 1.5, 4)}"]["ambulanceCollisions"] is None
+    assert runs[f"basic_static/{run_key('grid4x4', 1.5, 5)}"]["ambulanceCollisions"] is None
+    assert runs[f"basic_static/{KEY}"]["ambulanceCollisions"] == 0  # no collision at all
 
 
 def test_a_run_is_served_with_its_authoritative_summary(
@@ -200,3 +224,18 @@ def test_paired_runs_of_a_seed_start_from_the_same_traffic_and_place() -> None:
         assert len(set(starts.values())) == 1, (seed, starts)
     runs = load_runs(RECORDED)
     assert len(runs) == 560  # the Sprint 9 results are untouched
+
+
+@real
+def test_the_dashboard_reports_the_published_ambulance_collisions() -> None:
+    """22 collision events with the ambulance in 12 of 140 OFF-realistic runs, none elsewhere:
+    the figures in the paper and the README, read from the classification."""
+    events: dict[str, int] = {}
+    runs_with: dict[str, int] = {}
+    for run in build_index(RECORDED)["runs"]:
+        count = run["summary"]["ambulance_collisions"]
+        assert count is not None, run["id"]  # every run with a collision was classified
+        events[run["strategy"]] = events.get(run["strategy"], 0) + count
+        runs_with[run["strategy"]] = runs_with.get(run["strategy"], 0) + (count > 0)
+    assert events == {"off_strict": 0, "off_realistic": 22, "basic": 0, "coord": 0}
+    assert runs_with["off_realistic"] == 12

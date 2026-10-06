@@ -12,6 +12,9 @@ import { SimSocket, fetchNetwork, socketUrl, tabClientId } from "../simulation/w
 // The read-only dashboard (/dashboard) for a second screen or another PC: no 3D, own chunk.
 const DashboardPage = lazy(() => import("../dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 
+// The replay of recorded experiment runs (/replay): a 2D command centre, no 3D, own chunk.
+const ReplayPage = lazy(() => import("../replay/ReplayPage").then((m) => ({ default: m.ReplayPage })));
+
 // Dev-only asset inspection page (CLAUDE.md section 11); not part of the production bundle.
 const AssetsPage = import.meta.env.DEV ? lazy(() => import("../assets/AssetsPage")) : null;
 
@@ -20,6 +23,13 @@ export function App() {
     return (
       <Suspense fallback={null}>
         <AssetsPage />
+      </Suspense>
+    );
+  }
+  if (window.location.pathname.startsWith("/replay")) {
+    return (
+      <Suspense fallback={null}>
+        <ReplayPage />
       </Suspense>
     );
   }

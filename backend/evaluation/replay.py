@@ -45,8 +45,27 @@ def _number(value: Any) -> float | None:
     return None if math.isnan(number) else number
 
 
-def summary(row: pd.Series) -> dict[str, Any]:
-    """The authoritative result of one run, from its runs.csv row (blank cells are None)."""
+def classification(out: Path) -> dict[tuple[str, float, int, str], int]:
+    """Collision events that named the ambulance, per run, from summary/collisions.csv
+    (scripts.classify_collisions re-ran every run that had a collision). Empty until it ran."""
+    path = out / "summary" / "collisions.csv"
+    if not path.exists():
+        return {}
+    table = pd.read_csv(path)
+    table = table[table["reproduced"].astype(bool)]  # a run that did not reproduce says nothing
+    return {
+        (str(r.scenario), float(r.scale), int(r.seed), str(r.arm)): int(r.ambulance_events)
+        for r in table.itertuples(index=False)
+    }
+
+
+def summary(
+    row: pd.Series, classified: dict[tuple[str, float, int, str], int] | None = None
+) -> dict[str, Any]:
+    """The authoritative result of one run, from its runs.csv row (blank cells are None).
+
+    ambulance_collisions: 0 when SUMO reported no collision in the run; else the classified
+    count of events that named the ambulance; None when the run was not classified."""
     out: dict[str, Any] = {
         "origin": str(row["origin"]),
         "destination": str(row["destination"]),
@@ -59,8 +78,11 @@ def summary(row: pd.Series) -> dict[str, Any]:
     for name in _INT:
         number = _number(row.get(name))
         out[name] = None if number is None else int(number)
-    classified = _number(row.get("ambulance_collisions"))  # blank: not classified (collisions=0)
-    out["ambulance_collisions"] = None if classified is None else int(classified)
+    key = (str(row["scenario"]), float(row["scale"]), int(row["seed"]), str(row["arm"]))
+    if out["collisions"] == 0:
+        out["ambulance_collisions"] = 0
+    else:
+        out["ambulance_collisions"] = (classified or {}).get(key)
     return out
 
 
@@ -102,6 +124,7 @@ def build_index(out: Path) -> dict[str, Any]:
     if recorded.empty:
         return {"available": False, "note": "no experiment runs yet", "runs": []}
     stored = _telemetry_index(out)
+    classified = classification(out)
     runs = []
     for _, row in recorded.sort_values(["scenario", "scale", "seed", "arm"]).iterrows():
         arm = ARMS[str(row["arm"])]
@@ -117,7 +140,7 @@ def build_index(out: Path) -> dict[str, Any]:
                 "arm": arm.id,
                 "strategy": arm.signals,
                 "routing": arm.routing,
-                "summary": summary(row),
+                "summary": summary(row, classified),
                 "telemetry": has,
                 "matches_recorded": None if meta is None else bool(meta["matches_recorded"]),
                 "traffic": meta is not None and bool(meta["traffic"]),
@@ -153,5 +176,5 @@ def load_run(out: Path, arm: str, key: str) -> dict[str, Any] | None:
         "arm": arm,
         "strategy": ARMS[arm].signals,
         "routing": ARMS[arm].routing,
-        "summary": None if row.empty else summary(row.iloc[0]),
+        "summary": None if row.empty else summary(row.iloc[0], classification(out)),
     }
