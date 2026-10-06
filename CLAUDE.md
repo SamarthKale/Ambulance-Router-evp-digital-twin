@@ -596,7 +596,7 @@ Replies:
 - **TypeScript:** `strict` mode, no `any`, state in Zustand, components stay presentational.
 - Prefer iterative changes to the existing code over full rewrites.
 - Commit messages: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
-- **Git:** `main` holds approved work. Each sprint is built on `sprint-<n>/<name>` (e.g. `sprint-1/sumo-world`) and merged after approval. Keep PRs small and reviewable. Sprints 6–10 were approved to run back to back (2026-10-05): each one merges into `main` once its tests pass.
+- **Git:** `main` holds approved work. Each sprint is built on `sprint-<n>/<name>` (e.g. `sprint-1/sumo-world`) and merged after approval. Keep PRs small and reviewable. Sprints 6–10 were approved to run back to back (2026-10-05): each one merges into `main` once its tests pass. Sprint 11 was approved and merged on 2026-10-06.
 - Secrets and local paths go in `.env` (git-ignored). Commit `.env.example`.
 
 ## 13. Roadmap (v1)
@@ -613,7 +613,7 @@ Replies:
 | 8 | Accident injection + automatic reroute + "route compromised": wreck held in one lane in SUMO, incident props, accident penalty in routing, clear/reset ✅ |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run**; base signal program tuned per demand; `off_realistic` verified ✅ |
 | 10 | README, demo script hardening, one-command local launcher, LAN dashboard (`/dashboard`, `start.ps1 -Lan`), final verification (local native Windows; no Docker, no CI/CD) ✅ |
-| 11 | Replay dashboard (`/replay`): recorded runs played back on SUMO's real road geometry with the OFF-baseline ghost, signal stages, routes, queues and events; telemetry recorder + 88 recorded playbacks |
+| 11 | Replay dashboard (`/replay`): recorded runs played back on SUMO's real road geometry with the OFF-baseline ghost, signal stages, routes, queues and events; telemetry recorder + 88 recorded playbacks ✅ |
 
 Post-v1 (do not start early): traffic prediction, RL, OSM real-city import, multi-emergency-vehicle coordination, trucks/buses with protected turn phases.
 

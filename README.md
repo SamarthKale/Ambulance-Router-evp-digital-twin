@@ -63,7 +63,7 @@ cd backend
 | 8 | Accident injection + automatic reroute + "route compromised" | done |
 | 9 | Experiment runner (paired seeds, arms, demand sweep), charts, OFF ghost comparison run | done |
 | 10 | Demo hardening, one-command local launcher, LAN dashboard, final verification (local Windows; no Docker, no CI/CD) | done |
-| 11 | Replay dashboard (`/replay`): recorded experiment runs played back on the real road map, with the OFF ghost, signals, routes, queues, events and a demo mode | done (on its branch, awaiting approval) |
+| 11 | Replay dashboard (`/replay`): recorded experiment runs played back on the real road map, with the OFF ghost, signals, routes, queues, events and a demo mode | done |
 
 ## Prerequisites (Windows)
 
