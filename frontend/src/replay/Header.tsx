@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { clock, SPEEDS, useClockPlaying, useClockSpeed, useClockTime } from "./clock";
+import { clock, SPEEDS, useClockDuration, useClockPlaying, useClockSpeed, useClockTime } from "./clock";
 import { clockText } from "./format";
 import { missionState, nextEvent, previousEvent } from "./playback";
 import { indexRun, referenceId, runInfo, useReplay } from "./replayStore";
@@ -84,7 +84,7 @@ export function RunSelector() {
         onChange={(v) => pick("strategy", v)}
       />
       <Select label="Routing" value={choice.routing} options={optionsFor(runs, choice, "routing") as Routing[]} show={(v) => v.toUpperCase()} onChange={(v) => pick("routing", v)} />
-      <Select label="Seed" value={choice.seed} options={seeds} show={(v) => `${v}${recorded.has(v) ? " ●" : ""}`} onChange={(v) => pick("seed", v)} />
+      <Select label="Seed (● recorded)" value={choice.seed} options={seeds} show={(v) => `${v}${recorded.has(v) ? " ●" : ""}`} onChange={(v) => pick("seed", v)} />
       <label className="sel">
         <span>Compare with</span>
         <select value={compareWith} onChange={(e) => setCompareWith(e.target.value)}>
@@ -100,7 +100,6 @@ export function RunSelector() {
             ))}
         </select>
       </label>
-      <span className="muted small" title="● = a playback was recorded">● recorded playback</span>
     </div>
   );
 }
@@ -109,6 +108,7 @@ export function PlaybackControls() {
   const playing = useClockPlaying();
   const speed = useClockSpeed();
   const t = useClockTime(10);
+  const duration = useClockDuration();
   const index = useReplay((s) => s.index);
   const selectedId = useReplay((s) => s.selectedId);
   const compareWith = useReplay((s) => s.compareWith);
@@ -130,7 +130,7 @@ export function PlaybackControls() {
       <button disabled={!hasTrack} className="primary" title="Play / pause (space)" onClick={() => clock.toggle()}>
         {playing ? "⏸ Pause" : "▶ Play"}
       </button>
-      <button disabled={!hasTrack} title="Restart (Home)" onClick={() => clock.restart()}>↻ Restart</button>
+      <button disabled={!hasTrack} title="Restart (Home)" onClick={() => clock.restart()}>↻</button>
       <button disabled={!hasTrack} title="Next event (→)" onClick={() => { const e = pb && nextEvent(pb, clock.t); if (e) jump(e.t); }}>⏭</button>
       <label className="sel inline" title="Playback speed">
         <span>Speed</span>
@@ -146,7 +146,7 @@ export function PlaybackControls() {
         {primary?.playback ? (missionState(primary.playback, t) === "arrived" ? "ARRIVED" : "DRIVING") : "NO PLAYBACK"}
       </span>
       <span className="readout">
-        {clockText(t)} / {clockText(clock.duration)}
+        {clockText(t)} / {clockText(duration)}
       </span>
     </div>
   );

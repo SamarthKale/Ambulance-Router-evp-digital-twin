@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { distanceSeries, extent, haltedSeries, KMH, linePath, speedSeries, timeAtFraction } from "./charts";
+import { distanceSeries, extent, haltedSeries, KMH, linePath, percent, speedSeries, timeAtFraction } from "./charts";
 import { makePlayback } from "./playback";
 import { fakeRun } from "./testData";
 
@@ -33,5 +33,14 @@ describe("chart series", () => {
     expect(timeAtFraction(0.5, e)).toBe(60);
     expect(timeAtFraction(-1, e)).toBe(0);
     expect(timeAtFraction(2, e)).toBe(120);
+  });
+});
+
+describe("timeline positions", () => {
+  it("stay inside the track even when the duration is stale or zero", () => {
+    expect(percent(50, 100)).toBe(50);
+    expect(percent(132.7, 85)).toBe(100); // a marker past the end of a shorter run
+    expect(percent(-3, 100)).toBe(0);
+    expect(percent(10, 0)).toBe(0);
   });
 });

@@ -55,3 +55,8 @@ export function linePath(s: Series, e: Extent, w: number, h: number): string {
 export function timeAtFraction(u: number, e: Extent): number {
   return e.xmin + Math.min(1, Math.max(0, u)) * (e.xmax - e.xmin);
 }
+
+/** Position along the track in percent, kept inside it. */
+export function percent(t: number, duration: number): number {
+  return duration > 0 ? Math.min(100, Math.max(0, (t / duration) * 100)) : 0;
+}

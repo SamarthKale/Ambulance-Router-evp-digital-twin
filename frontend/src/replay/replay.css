@@ -771,6 +771,7 @@ table.cmp td.delta {
 
 .track {
   position: relative;
+  overflow: visible;
   height: 26px;
   background: #16213a;
   border: 1px solid var(--line);
@@ -975,4 +976,8 @@ table.cmp td.nums {
 .status-pill.arrived {
   color: var(--good);
   border-color: var(--good);
+}
+
+.rp-controls .sel select {
+  max-width: 150px;
 }

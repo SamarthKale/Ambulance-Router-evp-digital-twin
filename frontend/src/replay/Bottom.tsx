@@ -1,7 +1,7 @@
 import { useRef } from "react";
 
-import { distanceSeries, extent, haltedSeries, linePath, speedSeries, timeAtFraction, type Series } from "./charts";
-import { clock, useClockTime } from "./clock";
+import { distanceSeries, extent, haltedSeries, linePath, percent, speedSeries, timeAtFraction, type Series } from "./charts";
+import { clock, useClockDuration, useClockTime } from "./clock";
 import type { RunInfo } from "./compare";
 import { KIND_COLOR, KIND_LABEL, NOT_RECORDED } from "./format";
 import { useReplay } from "./replayStore";
@@ -11,7 +11,7 @@ export function Timeline({ run, reference }: { run: RunInfo; reference: RunInfo 
   const t = useClockTime(30);
   const requestView = useReplay((s) => s.requestView);
   const track = useRef<HTMLDivElement>(null);
-  const duration = clock.duration;
+  const duration = useClockDuration();
   const events = run.playback?.majorEvents ?? [];
   const ghostArrival = reference?.playback?.majorEvents.find((e) => e.kind === "arrival");
 
@@ -45,7 +45,7 @@ export function Timeline({ run, reference }: { run: RunInfo; reference: RunInfo 
           <button
             key={`${e.t}-${e.kind}-${i}`}
             className="marker"
-            style={{ left: `${duration > 0 ? (e.t / duration) * 100 : 0}%`, background: KIND_COLOR[e.kind] ?? "#64748b" }}
+            style={{ left: `${percent(e.t, duration)}%`, background: KIND_COLOR[e.kind] ?? "#64748b" }}
             title={`${e.t.toFixed(1)} s · ${KIND_LABEL[e.kind] ?? e.kind}${e.junction ? ` ${e.junction}` : ""}`}
             onPointerDown={(ev) => ev.stopPropagation()}
             onClick={() => {
@@ -56,7 +56,7 @@ export function Timeline({ run, reference }: { run: RunInfo; reference: RunInfo 
           />
         ))}
         {ghostArrival && duration > 0 && (
-          <span className="ghost-mark" style={{ left: `${(ghostArrival.t / duration) * 100}%` }} title={`OFF ghost arrives at ${ghostArrival.t.toFixed(1)} s`} />
+          <span className="ghost-mark" style={{ left: `${percent(ghostArrival.t, duration)}%` }} title={`OFF ghost arrives at ${ghostArrival.t.toFixed(1)} s`} />
         )}
         <div className="thumb" style={{ left: `${fraction * 100}%` }} />
       </div>
@@ -91,9 +91,10 @@ function Chart({
   unit: string;
 }) {
   const t = useClockTime(20);
+  const duration = useClockDuration();
   const resume = useRef(false);
   const series = [actual, reference].filter((s): s is Series => s !== null);
-  const e = extent(series, Math.max(1, clock.duration));
+  const e = extent(series, Math.max(1, duration));
   const seek = (ev: React.PointerEvent<HTMLDivElement>): void => {
     const r = ev.currentTarget.getBoundingClientRect();
     clock.seek(timeAtFraction((ev.clientX - r.left) / r.width, e));
@@ -138,10 +139,11 @@ function Chart({
 function PreemptionChart({ run }: { run: RunInfo }) {
   const t = useClockTime(20);
   const resume = useRef(false);
+  const duration = useClockDuration();
   const pb = run.playback;
   const segments = pb?.preemptions ?? [];
   const junctions = [...new Set(segments.map((s) => s.junction))];
-  const xmax = Math.max(1, clock.duration);
+  const xmax = Math.max(1, duration);
   const row = 7;
   const height = Math.max(24, junctions.length * row + 4);
   return (

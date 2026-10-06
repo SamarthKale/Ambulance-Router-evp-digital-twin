@@ -92,3 +92,8 @@ export function useClockPlaying(): boolean {
 export function useClockSpeed(): number {
   return useSyncExternalStore(clock.subscribe, () => clock.speed);
 }
+
+/** The length of the loaded run(s): changes when a second run (the ghost) finishes loading. */
+export function useClockDuration(): number {
+  return useSyncExternalStore(clock.subscribe, () => clock.duration);
+}
