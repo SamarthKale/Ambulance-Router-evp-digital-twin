@@ -6,6 +6,8 @@ import {
   lampOf,
   lastAtOrBefore,
   makePlayback,
+  missionState,
+  signalVisible,
   newTrafficFrame,
   nextEvent,
   poseAt,
@@ -213,5 +215,56 @@ describe.skipIf(!hasRealData())("the real recorded runs", () => {
     const count = trafficAt(real, 20.5, frame, () => 0);
     expect(count).toBeGreaterThan(50);
     for (let i = 0; i < count; i++) expect(nearestEdge(network, frame.x[i], frame.y[i], 25)).not.toBeNull();
+  });
+});
+
+describe("derived state", () => {
+  it("is driving until the recorded arrival, then arrived", () => {
+    expect(missionState(pb, 0)).toBe("driving");
+    expect(missionState(pb, 9.9)).toBe("driving");
+    expect(missionState(pb, 10)).toBe("arrived");
+    expect(missionState(pb, 11.5)).toBe("arrived");
+  });
+
+  it("filters to the junctions the safety controller holds", () => {
+    expect(signalVisible({ state: "GGrr", control: "preempted" }, true)).toBe(true);
+    expect(signalVisible({ state: "yyGG", control: "clearing" }, true)).toBe(true);
+    expect(signalVisible({ state: "rrGG", control: "recovering" }, true)).toBe(true);
+    expect(signalVisible({ state: "rrGG", control: "program" }, true)).toBe(false);
+    expect(signalVisible(null, true)).toBe(false);
+    expect(signalVisible({ state: "rrGG", control: "program" }, false)).toBe(true);
+    expect(signalVisible(null, false)).toBe(true);
+  });
+});
+
+describe("a run with no recorded series (empty telemetry)", () => {
+  const empty = makePlayback(
+    fakeRun({
+      ambulance: [],
+      status: [],
+      routes: [],
+      events: [],
+      durationS: 0,
+      missionTime: null,
+      arrived: false,
+      traffic: null,
+      edges: { ids: [], intervalS: 5, samples: [] },
+      signals: { ids: [], initial: [], initialControl: [], changes: [] },
+    }),
+  );
+
+  it("builds, and every reader says there is nothing instead of inventing something", () => {
+    expect(empty.duration).toBe(0);
+    expect(poseAt(empty, 3)).toBeNull();
+    expect(statusAt(empty, 3)).toEqual({ eta: null, distanceLeft: null, nextJunction: null, nextState: null, driven: 0 });
+    expect(routeAt(empty, 3)).toEqual({ current: null, previous: null, changedAt: null });
+    expect(signalAt(empty, "A0", 3)).toBeNull();
+    expect(eventsUpTo(empty, 3)).toEqual([]);
+    expect(nextEvent(empty, 0)).toBeNull();
+    expect(previousEvent(empty, 5)).toBeNull();
+    expect(empty.preemptions).toEqual([]);
+    expect(totalHalting(empty, 0)).toBe(0);
+    expect(trafficAt(empty, 1, newTrafficFrame(4), () => 0)).toBe(0);
+    expect(missionState(empty, 5)).toBe("driving");
   });
 });

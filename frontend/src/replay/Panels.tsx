@@ -10,6 +10,7 @@ import {
   eventsUpTo,
   lampOf,
   MAJOR_KINDS,
+  missionState,
   poseAt,
   preemptionAt,
   signalAt,
@@ -75,7 +76,7 @@ export function MissionCard({ run }: { run: RunInfo }) {
   const pose = pb ? poseAt(pb, t) : null;
   const status = pb ? statusAt(pb, t) : null;
   const events = pb ? eventsUpTo(pb, t) : [];
-  const arrived = events.some((e) => e.kind === "arrival");
+  const arrived = pb ? missionState(pb, t) === "arrived" : false;
   const preemptedSoFar = events.filter((e) => e.kind === "preempt" && e.accepted).length;
   const reroutesSoFar = events.filter((e) => e.kind === "reroute").length;
   const state = !pb ? NOT_RECORDED : arrived ? "Arrived" : "Driving";

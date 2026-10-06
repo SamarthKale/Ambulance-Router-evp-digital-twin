@@ -33,6 +33,7 @@ import {
   poseAt,
   routeAt,
   signalAt,
+  signalVisible,
   trafficAt,
   type Playback,
   type Pose,
@@ -211,8 +212,7 @@ export function MapCanvas({ geometry, focus, other, otherLabel }: Props) {
     const signalIds = geo.junctions.filter((j) => j.signalised);
     for (const j of signalIds) {
       const sig = pb ? signalAt(pb, j.id, t) : null;
-      const held = sig !== null && sig.control !== "program";
-      if (st.onlyPreempted && !held) continue;
+      if (!signalVisible(sig, st.onlyPreempted)) continue;
       const halo = sig?.control === "clearing" ? COLORS.clearing : sig?.control === "preempted" ? COLORS.preempt : sig?.control === "recovering" ? COLORS.recovery : null;
       if (halo) {
         ctx.strokeStyle = halo;
@@ -369,7 +369,7 @@ export function MapCanvas({ geometry, focus, other, otherLabel }: Props) {
       ctx.font = "600 11px system-ui, sans-serif";
       ctx.textAlign = "center";
       for (const j of signalIds) {
-        if (st.onlyPreempted && !(pb && signalAt(pb, j.id, t)?.control !== "program")) continue;
+        if (!signalVisible(pb ? signalAt(pb, j.id, t) : null, st.onlyPreempted)) continue;
         ctx.fillText(j.id, X(j.cx), Y(j.cy) + 4);
       }
       ctx.textAlign = "start";

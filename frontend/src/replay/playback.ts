@@ -359,3 +359,19 @@ export function trafficAt(pb: Playback, t: number, out: TrafficFrame, typeIndex:
   return out.count;
 }
 
+
+// ---- derived state, kept pure so it can be tested ------------------------------------------
+export type MissionState = "driving" | "arrived";
+
+/** "arrived" once the recorded arrival event has happened, else "driving". */
+export function missionState(pb: Playback, t: number): MissionState {
+  const i = lastAtOrBefore(pb.eventTimes, t);
+  for (let k = i; k >= 0; k--) if (pb.events[k].kind === "arrival") return "arrived";
+  return "driving";
+}
+
+/** The "only preempted signals" filter: a junction shows when the safety controller (not the
+ * normal program) has it, or when the filter is off. */
+export function signalVisible(sig: SignalAt | null, onlyPreempted: boolean): boolean {
+  return !onlyPreempted || (sig !== null && sig.control !== "program");
+}

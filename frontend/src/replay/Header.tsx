@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { clock, SPEEDS, useClockPlaying, useClockSpeed, useClockTime } from "./clock";
 import { clockText } from "./format";
-import { nextEvent, previousEvent } from "./playback";
+import { missionState, nextEvent, previousEvent } from "./playback";
 import { indexRun, referenceId, runInfo, useReplay } from "./replayStore";
 import {
   armLabel,
@@ -142,6 +142,9 @@ export function PlaybackControls() {
           ))}
         </select>
       </label>
+      <span className={`status-pill ${primary?.playback ? missionState(primary.playback, t) : "none"}`} title="Mission status at the playback time">
+        {primary?.playback ? (missionState(primary.playback, t) === "arrived" ? "ARRIVED" : "DRIVING") : "NO PLAYBACK"}
+      </span>
       <span className="readout">
         {clockText(t)} / {clockText(clock.duration)}
       </span>

@@ -178,6 +178,14 @@ def test_corrupt_telemetry_is_an_error_not_a_fake_run(
     assert client.get(f"/api/replay/runs/basic_static/{KEY}").status_code == 500
 
 
+def test_big_responses_are_compressed(client: TestClient, experiments: Path) -> None:
+    network = client.get("/api/replay/network/grid4x4", headers={"Accept-Encoding": "gzip"})
+    assert network.headers["content-encoding"] == "gzip" and network.json()["lanes"]
+    plain = client.get("/api/replay/network/grid4x4", headers={"Accept-Encoding": "identity"})
+    assert "content-encoding" not in plain.headers
+    assert network.num_bytes_downloaded < plain.num_bytes_downloaded / 3  # bytes on the wire
+
+
 def test_the_network_comes_from_the_scenario(client: TestClient) -> None:
     body = client.get("/api/replay/network/grid4x4").json()
     assert body["lanes"] and body["hospital"]["edge"] and body["bounds"][2] > 600
