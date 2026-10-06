@@ -112,6 +112,8 @@ sparkathon26/                      (EmergencyFlow AI)
 │   │   │                          # exr.ts + exrWorker.ts (skybox), AssetsPage.tsx (dev-only /assets)
 │   │   ├── dashboard/             # Hud.tsx, layout.ts (panel widths shared with the camera),
 │   │   │                          # Results.tsx + resultsChart.ts (in-app chart, R), DashboardPage.tsx
+│   │   ├── replay/                # ReplayPage.tsx (/replay), MapCanvas.tsx (2D map), playback.ts (interpolation,
+│   │   │                          # signals, events), compare.ts, safety.ts, clock.ts, runs.ts, charts.ts (+ *.test.ts)
 │   │   └── app/                   # App.tsx, app.css
 │   └── scripts/                   # deliveredModels.ts (Vite plugin: /models/ -> 3d_models/),
 │                                  # check-assets.ts (npm run check:assets) (+ *.test.ts)
@@ -124,12 +126,14 @@ sparkathon26/                      (EmergencyFlow AI)
 │   │                              # incidents.py (accident wrecks), ghost.py (OFF ghost process)
 │   ├── ai/                        # rules.py (BASIC), coord.py (COORD), routing.py (live-cost routing)
 │   ├── evaluation/                # arms, missions (seeded), metrics, stats (bootstrap, Wilcoxon),
-│   │                              # programs (tuned signal programs), runner (one run), report
+│   │                              # programs (tuned signal programs), runner (one run), report,
+│   │                              # telemetry (replay recorder), replay (what /api/replay serves)
 │   ├── safety/                    # controller.py, monitor.py, invariants.py (R1-R3), signal_table.py
 │   ├── scripts/                   # smoke_compare.py (OFF vs BASIC, one seed), benchmark.py,
 │   │                              # gen_contract.py (-> frontend contract.fixtures.ts),
 │   │                              # eta_check.py (routing ETA vs measured, seeded autopilot),
-│   │                              # run_experiments.py (all arms, paired seeds -> experiments/)
+│   │                              # run_experiments.py (all arms, paired seeds -> experiments/),
+│   │                              # record_telemetry.py (re-run selected runs with a recorder -> experiments/telemetry/)
 │   ├── tests/                     # incl. test_architecture.py (layering guards), helpers.py
 │   └── main.py
 ├── scenarios/
@@ -142,6 +146,7 @@ sparkathon26/                      (EmergencyFlow AI)
     ├── <arm>/runs.csv             # one row per run; <arm>/manifests/<run>.json: run manifest per run
     ├── programs/                  # the tuned base signal program per scenario and demand
     ├── summary/                   # paired.csv, summary.json (in-app chart), *.png charts
+    ├── telemetry/                 # <arm>/<run>.json.gz playback of a recorded run + index.json (Sprint 11)
     └── eta/                       # eta_check.csv (Sprint 6)
 ```
 
@@ -163,6 +168,7 @@ Keep `prediction.py` out of the repo until post-v1.
 
 **Dashboard and LAN access:**
 - `/dashboard` (`frontend/src/dashboard/DashboardPage.tsx`) is a read-only page with no 3D: live tiles (simulation, ambulance, OFF ghost, safety), the controller log, and the batch results. It shows the `/api/results` chart per demand and the matplotlib PNGs from `GET /api/charts/<name>` (plain names from `experiments/summary/` only), refreshed every 30 s. It connects as an observer and never sends commands.
+- `/replay` (Sprint 11, `frontend/src/replay/`) plays back the recorded experiment runs on a 2D map; it is not live (section 14, Replay). Deep link: `/replay?run=<arm>/<run key>&ref=<arm>/<run key>&t=<s>`.
 - `start.ps1 -Lan` makes Vite listen on all addresses and prints the PC's network URLs. The backend stays on 127.0.0.1 behind Vite's proxy, so only the frontend port is exposed.
 - Windows blocks inbound connections on *Public* networks (the launcher warns): make the network Private or add a firewall rule for the port.
 - Pages opened by IP are not a secure context, so browser APIs limited to https/localhost (e.g. `crypto.randomUUID`) must not be used; tab ids use `crypto.getRandomValues` (tested).
@@ -184,6 +190,7 @@ cd backend
 .venv\Scripts\python.exe -m scripts.run_experiments --scales 0.75,1.0,2.0 --seeds 1-10        # demand sweep
 .venv\Scripts\python.exe -m scripts.run_experiments --report-only                            # charts from the CSVs
 .venv\Scripts\python.exe -m scripts.classify_collisions                                      # which collisions involve the ambulance
+.venv\Scripts\python.exe -m scripts.record_telemetry --scales 1.5 --seeds 1-5 --traffic-seeds 1-5  # playbacks for /replay
 .venv\Scripts\python.exe -m scripts.gen_contract                           # after ANY change to api/protocol.py or a scenario
 .venv\Scripts\python.exe ..\scenarios\build_grid.py                        # regenerate scenarios\grid2x2
 .venv\Scripts\python.exe ..\scenarios\build_grid.py --nx 4 --ny 4          # evaluation grid
@@ -408,6 +415,8 @@ Field notes:
 - **`incidents`:** active accidents: the wreck's centre, its lane (0 = curb) and its heading. Wrecks are not in `vehicles`.
 - **`ghost`:** the OFF ghost of this mission (section 14), null before the dispatch. `phase`: `driving`, `arrived` or `unavailable` (with a `reason`). `pose` is where the ghost was at (at most) this tick's time; `missionTime` arrives with `arrived`.
 
+Replay (Sprint 11, `GET`, read-only, from `experiments/`): `/api/replay/index` (every run of runs.csv and whether a playback exists), `/api/replay/runs/<arm>/<run key>` (one run's telemetry with its authoritative summary; 404 when none was recorded) and `/api/replay/network/<scenario>` (the road geometry of a scenario, which need not be the live one). Models `ReplayIndexMsg` and `ReplayRunMsg` in `protocol.py`, mirrored in `state.ts` and checked by the contract fixtures.
+
 Frontend → backend (commands). Every command except `drive` and `hello` carries an `id` and gets an ack once it has run. Driving commands, `set_mode`, `reset` and the incident commands are subject to the driver lock (section 2.8):
 ```json
 {"v": 1, "cmd": "hello", "clientId": "tab-<uuid>"}                                           // first on every (re)connect; reply: session
@@ -604,6 +613,7 @@ Replies:
 | 8 | Accident injection + automatic reroute + "route compromised": wreck held in one lane in SUMO, incident props, accident penalty in routing, clear/reset ✅ |
 | 9 | Experiment runner (paired seeds, arms, demand sweep) + charts + **ghost comparison run**; base signal program tuned per demand; `off_realistic` verified ✅ |
 | 10 | README, demo script hardening, one-command local launcher, LAN dashboard (`/dashboard`, `start.ps1 -Lan`), final verification (local native Windows; no Docker, no CI/CD) ✅ |
+| 11 | Replay dashboard (`/replay`): recorded runs played back on SUMO's real road geometry with the OFF-baseline ghost, signal stages, routes, queues and events; telemetry recorder + 88 recorded playbacks |
 
 Post-v1 (do not start early): traffic prediction, RL, OSM real-city import, multi-emergency-vehicle coordination, trucks/buses with protected turn phases.
 
@@ -672,6 +682,14 @@ Implemented in Sprint 9: `backend/evaluation/` and `scripts/run_experiments.py` 
   - Experiments run from a clean commit, from a git worktree, so code edits during a batch can't mix into it.
   - `experiments/summary/` holds `paired.csv`, `summary.json` (read by the app) and the charts: travel time per arm, paired differences against the baseline with confidence intervals, and the demand sweep.
   - Charts are labelled as autopilot batch results, since the live demo is manual.
+- **Replay** (Sprint 11, `evaluation/telemetry.py`, `scripts/record_telemetry.py`, `evaluation/replay.py`, `frontend/src/replay/`): the batch kept only aggregates, so a replay needs a time series.
+  - `record_telemetry` re-runs selected runs (same code path, seed and tuned program: SUMO is deterministic) with a passive `TelemetryRecorder` watching the `EngineState`, and writes `experiments/telemetry/<arm>/<run>.json.gz`. It never changes `runs.csv`, which stays authoritative.
+  - Each file stores, in seconds since the dispatch: the ambulance track (5 Hz), the route and ETA (1 Hz), every signal change with the safety controller's stage, the controller's decisions, SUMO's collision count and the monitor's violation count as events, route changes, per-road queue counts every 5 s and the background traffic at 1 Hz. Nothing is computed that the simulation did not report.
+  - Each re-run is compared with its `runs.csv` row on 17 fields (dispatch hash, travel time, waiting, stops, preemptions, violations, collisions, background time loss ...) and the result is stored (`verification.matchesRecorded`); a playback that differed would be flagged, not hidden. All 88 recorded runs (x1.5 seeds 1-5, x0.75/1.0/2.0 seeds 1-2, all 8 arms) matched.
+  - The OFF ghost of a recorded run is the `off_strict_static` run of the same seed, so both start from the same traffic and mission. "Time saved" is its travel time minus the run's, shown only when both runs arrived and were recorded.
+  - Ambulance collisions come from `summary/collisions.csv` (the classification): 22 events in 12 OFF-realistic runs, none in the other arms. A run with collisions that was not classified says so.
+  - The page says "Not recorded" for anything missing: a run without a playback shows its `runs.csv` result and no positions. No accident was injected in the batch, so none is shown (the page draws one if a recording has it).
+  - Background traffic is drawn from 1 Hz samples, interpolated linearly between two samples of the same vehicle; a vehicle recorded in one sample only is skipped, never extrapolated.
 
 ## 15. Demo script
 
@@ -706,6 +724,7 @@ Labels are the UI's own. The README has the same script for presenters.
 - Don't claim novelty from "ambulance turns the signal green". The contribution is the closed-loop testbed, the human-in-the-loop driving, the verified safety layer, queue-aware coordination and fair, reproducible evaluation.
 - Don't call it a digital twin of a real city, call COORD "AI" without saying it is rule-based, or show an unmeasured `timeSaved`.
 - Don't use SUMO-GUI as the final UI.
+- Don't draw a replay position, signal state, route, queue or metric that was not recorded: show "Not recorded". Don't present a recorded run as live.
 - Don't commit large binaries outside Git LFS.
 - Don't modify, compress, rename or replace delivered `.glb` files or the `3d_models/` folders unless explicitly instructed.
 

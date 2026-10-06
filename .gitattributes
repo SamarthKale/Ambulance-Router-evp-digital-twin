@@ -14,3 +14,6 @@
 3d_models/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
 # Experiment charts: small generated PNGs (up to about 130 KB), kept in git, never converted
 experiments/**/*.png binary
+
+experiments/telemetry/**/*.gz binary
+experiments/telemetry/index.json text eol=lf

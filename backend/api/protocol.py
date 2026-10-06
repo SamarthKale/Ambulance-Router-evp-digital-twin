@@ -570,6 +570,153 @@ class ResultsMsg(Message):
     charts: list[str] = []  # PNG charts, served at /api/charts/<name>
 
 
+# ---- GET /api/replay/... (Sprint 11: recorded experiment runs, played back) -----------------
+ReplayStrategy = Literal["off_strict", "off_realistic", "basic", "coord"]
+ReplayRouting = Literal["static", "dynamic"]
+
+
+class ReplaySummaryMsg(Message):
+    """One run's authoritative result: its row in experiments/<arm>/runs.csv (blank = null)."""
+
+    origin: str
+    destination: str
+    dispatch_s: float | None  # simulation time of the dispatch
+    trip_m: float | None  # length of the shortest route between origin and destination
+    arrived: bool
+    valid: bool  # arrived and no teleport (invalid runs are excluded from the statistics)
+    signal_program: str  # "tuned" or "net"
+    cycle_s: float | None
+    travel_s: float | None
+    wait_s: float | None
+    stops: int | None
+    red_stops: int | None
+    red_crossings: int | None
+    approach_clear_s: float | None
+    queue_mean: float | None
+    bg_time_loss_s: float | None
+    preemptions: int | None
+    route_changes: int | None
+    violations: int | None  # independent monitor
+    collisions: int | None  # SUMO-reported, whole 600 s window (any vehicles)
+    emergency_brakings: int | None  # SUMO log, after the dispatch (any vehicles)
+    teleports: int | None
+    ambulance_collisions: int | None  # null: not classified (scripts.classify_collisions)
+
+
+class ReplayIndexRunMsg(Message):
+    id: str  # "<arm>/<run key>", e.g. basic_static/grid4x4_x1.5_seed001
+    scenario: str
+    scale: float
+    seed: int
+    arm: str
+    strategy: ReplayStrategy
+    routing: ReplayRouting
+    summary: ReplaySummaryMsg
+    telemetry: bool  # a playback was recorded for this run
+    matches_recorded: bool | None  # its re-run reproduced the runs.csv row (null: no telemetry)
+    traffic: bool  # the background traffic was recorded too
+    differences: list[str] = []
+
+
+class ReplayIndexMsg(Message):
+    v: Literal[1] = 1
+    available: bool  # false until scripts.run_experiments has written runs
+    note: str = ""
+    runs: list[ReplayIndexRunMsg] = []
+
+
+class ReplayRouteMsg(Message):
+    t: float  # s since the dispatch
+    edges: list[str]  # the suggested route from the ambulance's road to the hospital
+    eta: float
+    routing: ReplayRouting
+
+
+class ReplaySignalsMsg(Message):
+    ids: list[str]
+    initial: list[str]  # SUMO state string per signal at t = 0
+    initial_control: list[SignalControl]
+    # [t, signal index, state string, controller stage]: only when one of them changed
+    changes: list[tuple[float, int, str, SignalControl]]
+
+
+class ReplayEventMsg(Message):
+    t: float
+    kind: str  # dispatch, preempt, green, release, timeout, resume, fail_safe, route_review,
+    # reroute, accident, collision, violation, arrival
+    junction: str | None = None
+    edge: str | None = None
+    text: str = ""
+    accepted: bool | None = None  # controller decisions only
+
+
+class ReplayEdgeSampleMsg(Message):
+    t: float
+    halting: list[int]  # per road, in ReplayEdgesMsg.ids order
+    vehicles: list[int]
+    speed: list[float]  # mean speed, m/s
+
+
+class ReplayEdgesMsg(Message):
+    ids: list[str]
+    interval_s: float
+    samples: list[ReplayEdgeSampleMsg]
+
+
+class ReplayTrafficMsg(Message):
+    interval_s: float
+    ids: list[str]  # vehicle ids, indexed by the first value of each quad
+    types: list[str]  # vType per id
+    # [t, [id index, x, y, angle, id index, x, y, angle, ...]]
+    samples: list[tuple[float, list[float]]]
+
+
+class ReplayVerificationMsg(Message):
+    matches_recorded: bool
+    checked: int
+    differences: list[str]
+
+
+class ReplayProvenanceMsg(Message):
+    git_sha: str
+    git_dirty: bool
+    sumo_version: str
+    created_at: str
+
+
+class ReplayRunMsg(Message):
+    """One recorded run played back: everything is what the simulation reported; times are
+    seconds since the dispatch."""
+
+    v: Literal[1] = 1
+    schema_version: int
+    id: str
+    scenario: str
+    scale: float
+    seed: int
+    arm: str
+    strategy: ReplayStrategy
+    routing: ReplayRouting
+    dispatch_s: float
+    duration_s: float  # recorded time after the dispatch
+    arrived: bool
+    mission_time: float | None
+    ambulance_edges: list[str]  # road ids referenced by the track
+    # [t, x, y, angle, speed, road index (ambulance_edges), lane]
+    ambulance: list[tuple[float, float, float, float, float, int, int]]
+    # [t, ETA s, metres to go, next signal, its state for the ambulance]; null when not reported
+    status: list[tuple[float, float | None, float | None, str | None, str | None]]
+    routes: list[ReplayRouteMsg]  # the suggestion at t = 0 and each time it changed
+    signals: ReplaySignalsMsg
+    events: list[ReplayEventMsg]
+    edges: ReplayEdgesMsg
+    traffic: ReplayTrafficMsg | None = None  # null: the traffic was not recorded
+    incidents: list[IncidentMsg] = []  # none in the Sprint 9 batch (no accidents injected)
+    summary: ReplaySummaryMsg | None = None  # null: the run is missing from runs.csv
+    verification: ReplayVerificationMsg
+    recorded_with: ReplayProvenanceMsg
+
+
 class HealthMsg(Message):
     status: Literal["starting", "running", "error"]
     error: str | None = None

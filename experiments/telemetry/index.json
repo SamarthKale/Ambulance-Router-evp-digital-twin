@@ -1,0 +1,621 @@
+{
+ "generated_at": "2026-10-05T21:23:09+00:00",
+ "runs": {
+  "basic_dynamic/grid4x4_x0.75_seed001": {
+   "bytes": 60809,
+   "differences": [],
+   "duration_s": 73.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x0.75_seed002": {
+   "bytes": 58433,
+   "differences": [],
+   "duration_s": 67.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1.5_seed001": {
+   "bytes": 139519,
+   "differences": [],
+   "duration_s": 85.4,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1.5_seed002": {
+   "bytes": 118948,
+   "differences": [],
+   "duration_s": 70.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1.5_seed003": {
+   "bytes": 222745,
+   "differences": [],
+   "duration_s": 124.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1.5_seed004": {
+   "bytes": 184170,
+   "differences": [],
+   "duration_s": 104.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1.5_seed005": {
+   "bytes": 200100,
+   "differences": [],
+   "duration_s": 112.4,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1_seed001": {
+   "bytes": 70850,
+   "differences": [],
+   "duration_s": 63.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x1_seed002": {
+   "bytes": 106493,
+   "differences": [],
+   "duration_s": 91.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x2_seed001": {
+   "bytes": 165773,
+   "differences": [],
+   "duration_s": 76.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_dynamic/grid4x4_x2_seed002": {
+   "bytes": 166331,
+   "differences": [],
+   "duration_s": 69.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x0.75_seed001": {
+   "bytes": 60705,
+   "differences": [],
+   "duration_s": 73.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x0.75_seed002": {
+   "bytes": 58425,
+   "differences": [],
+   "duration_s": 67.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1.5_seed001": {
+   "bytes": 139497,
+   "differences": [],
+   "duration_s": 85.4,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1.5_seed002": {
+   "bytes": 118950,
+   "differences": [],
+   "duration_s": 70.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1.5_seed003": {
+   "bytes": 214898,
+   "differences": [],
+   "duration_s": 121.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1.5_seed004": {
+   "bytes": 189021,
+   "differences": [],
+   "duration_s": 106.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1.5_seed005": {
+   "bytes": 199485,
+   "differences": [],
+   "duration_s": 112.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1_seed001": {
+   "bytes": 70864,
+   "differences": [],
+   "duration_s": 63.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x1_seed002": {
+   "bytes": 106461,
+   "differences": [],
+   "duration_s": 91.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x2_seed001": {
+   "bytes": 189870,
+   "differences": [],
+   "duration_s": 88.4,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "basic_static/grid4x4_x2_seed002": {
+   "bytes": 166335,
+   "differences": [],
+   "duration_s": 69.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x0.75_seed001": {
+   "bytes": 51907,
+   "differences": [],
+   "duration_s": 62.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x0.75_seed002": {
+   "bytes": 58475,
+   "differences": [],
+   "duration_s": 67.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1.5_seed001": {
+   "bytes": 141522,
+   "differences": [],
+   "duration_s": 86.0,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1.5_seed002": {
+   "bytes": 108695,
+   "differences": [],
+   "duration_s": 64.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1.5_seed003": {
+   "bytes": 222075,
+   "differences": [],
+   "duration_s": 123.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1.5_seed004": {
+   "bytes": 185069,
+   "differences": [],
+   "duration_s": 104.7,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1.5_seed005": {
+   "bytes": 183499,
+   "differences": [],
+   "duration_s": 102.4,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1_seed001": {
+   "bytes": 69944,
+   "differences": [],
+   "duration_s": 62.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x1_seed002": {
+   "bytes": 108467,
+   "differences": [],
+   "duration_s": 93.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x2_seed001": {
+   "bytes": 167519,
+   "differences": [],
+   "duration_s": 77.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_dynamic/grid4x4_x2_seed002": {
+   "bytes": 166214,
+   "differences": [],
+   "duration_s": 69.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x0.75_seed001": {
+   "bytes": 51803,
+   "differences": [],
+   "duration_s": 62.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x0.75_seed002": {
+   "bytes": 58467,
+   "differences": [],
+   "duration_s": 67.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1.5_seed001": {
+   "bytes": 141481,
+   "differences": [],
+   "duration_s": 86.0,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1.5_seed002": {
+   "bytes": 108717,
+   "differences": [],
+   "duration_s": 64.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1.5_seed003": {
+   "bytes": 213743,
+   "differences": [],
+   "duration_s": 120.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1.5_seed004": {
+   "bytes": 184299,
+   "differences": [],
+   "duration_s": 104.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1.5_seed005": {
+   "bytes": 194575,
+   "differences": [],
+   "duration_s": 109.7,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1_seed001": {
+   "bytes": 69953,
+   "differences": [],
+   "duration_s": 62.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x1_seed002": {
+   "bytes": 108409,
+   "differences": [],
+   "duration_s": 93.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x2_seed001": {
+   "bytes": 190334,
+   "differences": [],
+   "duration_s": 88.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "coord_static/grid4x4_x2_seed002": {
+   "bytes": 166214,
+   "differences": [],
+   "duration_s": 69.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x0.75_seed001": {
+   "bytes": 56124,
+   "differences": [],
+   "duration_s": 68.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x0.75_seed002": {
+   "bytes": 76824,
+   "differences": [],
+   "duration_s": 90.5,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1.5_seed001": {
+   "bytes": 224135,
+   "differences": [],
+   "duration_s": 137.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1.5_seed002": {
+   "bytes": 132521,
+   "differences": [],
+   "duration_s": 78.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1.5_seed003": {
+   "bytes": 229678,
+   "differences": [],
+   "duration_s": 128.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1.5_seed004": {
+   "bytes": 429927,
+   "differences": [],
+   "duration_s": 238.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1.5_seed005": {
+   "bytes": 270315,
+   "differences": [],
+   "duration_s": 153.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1_seed001": {
+   "bytes": 75541,
+   "differences": [],
+   "duration_s": 67.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x1_seed002": {
+   "bytes": 136758,
+   "differences": [],
+   "duration_s": 120.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x2_seed001": {
+   "bytes": 247896,
+   "differences": [],
+   "duration_s": 113.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_dynamic/grid4x4_x2_seed002": {
+   "bytes": 263019,
+   "differences": [],
+   "duration_s": 108.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x0.75_seed001": {
+   "bytes": 61418,
+   "differences": [],
+   "duration_s": 74.0,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x0.75_seed002": {
+   "bytes": 76845,
+   "differences": [],
+   "duration_s": 90.5,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1.5_seed001": {
+   "bytes": 224075,
+   "differences": [],
+   "duration_s": 137.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1.5_seed002": {
+   "bytes": 132539,
+   "differences": [],
+   "duration_s": 78.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1.5_seed003": {
+   "bytes": 426166,
+   "differences": [],
+   "duration_s": 235.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1.5_seed004": {
+   "bytes": 361032,
+   "differences": [],
+   "duration_s": 201.7,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1.5_seed005": {
+   "bytes": 360016,
+   "differences": [],
+   "duration_s": 205.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1_seed001": {
+   "bytes": 75457,
+   "differences": [],
+   "duration_s": 67.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x1_seed002": {
+   "bytes": 136748,
+   "differences": [],
+   "duration_s": 120.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x2_seed001": {
+   "bytes": 247908,
+   "differences": [],
+   "duration_s": 113.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_realistic_static/grid4x4_x2_seed002": {
+   "bytes": 263017,
+   "differences": [],
+   "duration_s": 108.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x0.75_seed001": {
+   "bytes": 71193,
+   "differences": [],
+   "duration_s": 85.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x0.75_seed002": {
+   "bytes": 98449,
+   "differences": [],
+   "duration_s": 118.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1.5_seed001": {
+   "bytes": 224135,
+   "differences": [],
+   "duration_s": 137.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1.5_seed002": {
+   "bytes": 179968,
+   "differences": [],
+   "duration_s": 106.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1.5_seed003": {
+   "bytes": 245343,
+   "differences": [],
+   "duration_s": 138.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1.5_seed004": {
+   "bytes": 536770,
+   "differences": [],
+   "duration_s": 299.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1.5_seed005": {
+   "bytes": 331711,
+   "differences": [],
+   "duration_s": 189.5,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1_seed001": {
+   "bytes": 109034,
+   "differences": [],
+   "duration_s": 98.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x1_seed002": {
+   "bytes": 137012,
+   "differences": [],
+   "duration_s": 121.0,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x2_seed001": {
+   "bytes": 247896,
+   "differences": [],
+   "duration_s": 113.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_dynamic/grid4x4_x2_seed002": {
+   "bytes": 261858,
+   "differences": [],
+   "duration_s": 108.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x0.75_seed001": {
+   "bytes": 82891,
+   "differences": [],
+   "duration_s": 100.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x0.75_seed002": {
+   "bytes": 98410,
+   "differences": [],
+   "duration_s": 118.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1.5_seed001": {
+   "bytes": 224075,
+   "differences": [],
+   "duration_s": 137.6,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1.5_seed002": {
+   "bytes": 179965,
+   "differences": [],
+   "duration_s": 106.1,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1.5_seed003": {
+   "bytes": 428085,
+   "differences": [],
+   "duration_s": 236.9,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1.5_seed004": {
+   "bytes": 361032,
+   "differences": [],
+   "duration_s": 201.7,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1.5_seed005": {
+   "bytes": 366711,
+   "differences": [],
+   "duration_s": 209.2,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1_seed001": {
+   "bytes": 79839,
+   "differences": [],
+   "duration_s": 71.3,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x1_seed002": {
+   "bytes": 136944,
+   "differences": [],
+   "duration_s": 121.0,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x2_seed001": {
+   "bytes": 247908,
+   "differences": [],
+   "duration_s": 113.8,
+   "matches_recorded": true,
+   "traffic": true
+  },
+  "off_strict_static/grid4x4_x2_seed002": {
+   "bytes": 261851,
+   "differences": [],
+   "duration_s": 108.2,
+   "matches_recorded": true,
+   "traffic": true
+  }
+ }
+}

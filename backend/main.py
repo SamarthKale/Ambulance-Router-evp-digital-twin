@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 
 from api.channel import Broadcaster
 from api.protocol import NetworkMsg
@@ -54,6 +55,8 @@ def create_app(
         await asyncio.to_thread(engine.stop)  # closes SUMO
 
     app = FastAPI(title="EmergencyFlow AI", version="0.2.0", lifespan=lifespan)
+    # the replay's JSON is about 1 MB per run: compressed it is a fraction of that on Wi-Fi
+    app.add_middleware(GZipMiddleware, minimum_size=2048)
     app.state.engine = engine
     app.state.broadcaster = broadcaster
     app.state.session = SessionManager(grace_s=driver_grace_s)

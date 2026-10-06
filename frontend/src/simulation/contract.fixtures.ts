@@ -8,6 +8,8 @@ import type {
   ErrorMsg,
   HealthMsg,
   NetworkMsg,
+  ReplayIndexMsg,
+  ReplayRunMsg,
   ResultsMsg,
   SessionMsg,
   StateMsg,
@@ -533,6 +535,239 @@ export const noResults = {
   "experiments": [],
   "charts": []
 } satisfies ResultsMsg;
+
+export const replayIndex = {
+  "v": 1,
+  "available": true,
+  "note": "",
+  "runs": [
+    {
+      "id": "basic_static/grid4x4_x1.5_seed001",
+      "scenario": "grid4x4",
+      "scale": 1.5,
+      "seed": 1,
+      "arm": "basic_static",
+      "strategy": "basic",
+      "routing": "static",
+      "summary": {
+        "origin": "w0_A0",
+        "destination": "B1_e1",
+        "dispatchS": 310.0,
+        "tripM": 1051.8,
+        "arrived": true,
+        "valid": true,
+        "signalProgram": "tuned",
+        "cycleS": 34.7,
+        "travelS": 7.0,
+        "waitS": 0.0,
+        "stops": 0,
+        "redStops": 0,
+        "redCrossings": 0,
+        "approachClearS": null,
+        "queueMean": 0.5,
+        "bgTimeLossS": 100200.0,
+        "preemptions": 1,
+        "routeChanges": 0,
+        "violations": 0,
+        "collisions": 0,
+        "emergencyBrakings": 1,
+        "teleports": 0,
+        "ambulanceCollisions": null
+      },
+      "telemetry": true,
+      "matchesRecorded": true,
+      "traffic": true,
+      "differences": []
+    }
+  ]
+} satisfies ReplayIndexMsg;
+
+export const replayRun = {
+  "v": 1,
+  "schemaVersion": 1,
+  "id": "basic_static/grid4x4_x1.5_seed001",
+  "scenario": "grid4x4",
+  "scale": 1.5,
+  "seed": 1,
+  "arm": "basic_static",
+  "strategy": "basic",
+  "routing": "static",
+  "dispatchS": 310.0,
+  "durationS": 12.0,
+  "arrived": true,
+  "missionTime": 7.0,
+  "ambulanceEdges": [
+    "w0_A0",
+    "A0_B0"
+  ],
+  "ambulance": [
+    [
+      0.0,
+      0.0,
+      204.8,
+      90.0,
+      0.0,
+      0,
+      0
+    ],
+    [
+      7.0,
+      100.5,
+      204.8,
+      90.0,
+      15.2,
+      1,
+      1
+    ]
+  ],
+  "status": [
+    [
+      0.0,
+      7.0,
+      90.0,
+      "A0",
+      "r"
+    ],
+    [
+      7.0,
+      null,
+      null,
+      null,
+      null
+    ]
+  ],
+  "routes": [
+    {
+      "t": 0.0,
+      "edges": [
+        "w0_A0",
+        "A0_B0"
+      ],
+      "eta": 7.0,
+      "routing": "static"
+    }
+  ],
+  "signals": {
+    "ids": [
+      "A0"
+    ],
+    "initial": [
+      "GGrr"
+    ],
+    "initialControl": [
+      "program"
+    ],
+    "changes": [
+      [
+        3.3,
+        0,
+        "yyrr",
+        "clearing"
+      ],
+      [
+        5.3,
+        0,
+        "GGrr",
+        "preempted"
+      ]
+    ]
+  },
+  "events": [
+    {
+      "t": 0.0,
+      "kind": "dispatch",
+      "junction": null,
+      "edge": null,
+      "text": "ambulance dispatched",
+      "accepted": null
+    },
+    {
+      "t": 3.3,
+      "kind": "preempt",
+      "junction": "A0",
+      "edge": null,
+      "text": "ETA 14.7 s: clearing A0 for w0_A0 (yellow 4 s, all-red 2 s)",
+      "accepted": true
+    }
+  ],
+  "edges": {
+    "ids": [
+      "w0_A0"
+    ],
+    "intervalS": 5.0,
+    "samples": [
+      {
+        "t": 0.0,
+        "halting": [
+          0
+        ],
+        "vehicles": [
+          2
+        ],
+        "speed": [
+          9.5
+        ]
+      }
+    ]
+  },
+  "traffic": {
+    "intervalS": 1.0,
+    "ids": [
+      "f_0.1"
+    ],
+    "types": [
+      "car_sedan"
+    ],
+    "samples": [
+      [
+        0.0,
+        [
+          0.0,
+          12.5,
+          204.8,
+          90.0
+        ]
+      ]
+    ]
+  },
+  "incidents": [],
+  "summary": {
+    "origin": "w0_A0",
+    "destination": "B1_e1",
+    "dispatchS": 310.0,
+    "tripM": 1051.8,
+    "arrived": true,
+    "valid": true,
+    "signalProgram": "tuned",
+    "cycleS": 34.7,
+    "travelS": 7.0,
+    "waitS": 0.0,
+    "stops": 0,
+    "redStops": 0,
+    "redCrossings": 0,
+    "approachClearS": null,
+    "queueMean": 0.5,
+    "bgTimeLossS": 100200.0,
+    "preemptions": 1,
+    "routeChanges": 0,
+    "violations": 0,
+    "collisions": 0,
+    "emergencyBrakings": 1,
+    "teleports": 0,
+    "ambulanceCollisions": null
+  },
+  "verification": {
+    "matchesRecorded": true,
+    "checked": 17,
+    "differences": []
+  },
+  "recordedWith": {
+    "gitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gitDirty": false,
+    "sumoVersion": "Eclipse SUMO 1.27.1",
+    "createdAt": "2026-10-06T00:00:00+00:00"
+  }
+} satisfies ReplayRunMsg;
 
 export const commands = [
   {

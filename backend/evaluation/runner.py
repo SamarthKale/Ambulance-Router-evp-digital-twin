@@ -25,6 +25,7 @@ from ai.routing import RoadGraph
 from evaluation.arms import Arm
 from evaluation.metrics import MissionMetrics, parse_log, parse_tripinfo
 from evaluation.missions import MissionSpec, draw_mission
+from evaluation.telemetry import TelemetryRecorder
 from simulation.engine import SimulationEngine, SpawnAmbulance
 from simulation.network import RoadNetwork
 from simulation.sumo import REPO_ROOT, SCENARIOS_DIR, SumoConfig, find_sumo_binary
@@ -86,8 +87,11 @@ def write_red_vtype(scenario: str, path: Path) -> Path:
     return path
 
 
-def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
-    """Run one arm on one seed; returns the CSV row and its run manifest."""
+def run_one(
+    spec: RunSpec, work_dir: Path, recorder: TelemetryRecorder | None = None
+) -> dict[str, Any]:
+    """Run one arm on one seed; returns the CSV row and its run manifest. A recorder only
+    watches the states (it never changes the run) and its telemetry is returned too."""
     started = time.perf_counter()
     mission = mission_for(spec.scenario, spec.seed)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -122,6 +126,8 @@ def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
         end = mission.dispatch_s + spec.window_s - 1e-6
         while True:
             state = engine.tick()
+            if recorder is not None:
+                recorder.observe(state)
             metrics.observe(state)
             if state.snapshot.time >= end:
                 break
@@ -147,7 +153,10 @@ def run_one(spec: RunSpec, work_dir: Path) -> dict[str, Any]:
     }
     row["valid"] = bool(row["arrived"]) and row["teleports"] == 0
     row["wall_s"] = round(time.perf_counter() - started, 1)
-    return {"row": row, "manifest": manifest(spec, mission, config)}
+    result: dict[str, Any] = {"row": row, "manifest": manifest(spec, mission, config)}
+    if recorder is not None:
+        result["telemetry"] = recorder.result()
+    return result
 
 
 def _mean_cycle(engine: SimulationEngine) -> float:

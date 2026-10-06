@@ -32,7 +32,10 @@ export function DashboardPage() {
             Simulation testbed for emergency-vehicle signal priority · rule-based · no real signals are controlled
           </div>
         </div>
-        <span className={`pill ${connection}`}>{connection === "open" ? "live" : "reconnecting"}</span>
+        <div className="hud-row">
+          <a href="/replay" title="Play back recorded experiment runs">Replay recorded runs →</a>
+          <span className={`pill ${connection}`}>{connection === "open" ? "live" : "reconnecting"}</span>
+        </div>
       </header>
       {msg ? <Live msg={msg} /> : <div className="muted">Waiting for the simulation...</div>}
       <ResultsSection />

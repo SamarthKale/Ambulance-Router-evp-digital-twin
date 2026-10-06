@@ -30,6 +30,22 @@ To open it from another PC on the same network:
 3. **If it doesn't connect:** Windows blocks incoming connections on networks marked *Public*. Set the network to *Private* (Settings → Network → your Wi-Fi → Private), or allow the port once, in an admin PowerShell: `New-NetFirewallRule -DisplayName "EmergencyFlow 5173" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow`. The launcher warns when the network is Public.
 
 Only the frontend port is opened; the backend stays on 127.0.0.1 behind Vite's proxy.
+### Replay of the recorded experiments
+
+`http://localhost:5173/replay` plays back runs from the batch experiments on SUMO's real road map. **It is a recording, not a live simulation**, and the page says so. You see the actual ambulance next to its OFF-baseline ghost (the same seed with normal signals), the signal states with the safety controller's stage (normal, clearing, all-red, preempted, recovery), the suggested route and the one it replaced, queues per road, the background traffic, the safety controller's decisions and charts, all on one clock.
+
+- **Pick a run:** scenario, demand, signals (mode), routing, seed and what to compare with. A ● marks runs with a recorded playback (88: demand x1.5 seeds 1-5, and x0.75 / x1.0 / x2.0 seeds 1-2, all 8 arms). Other runs show their recorded result only.
+- **Control it:** play, pause, restart, previous/next event, 0.25x to 8x, the timeline (markers for dispatch, preemption, reroute, accident, collision, arrival), click a signal or a road for details, search (`A0`, `reroute`), follow the ambulance, the ghost or both, heat maps of queues, and a side-by-side view. Keys: **Space** play/pause, **←/→** event, **Home** restart, **D** demo mode, **+/-** zoom.
+- **Demo mode** hides the technical controls for a projector: the map, the route, the signals, the time saved and the major events.
+- **Real data only:** every position, signal state, route, queue and event was recorded from the simulation, and every result comes from `runs.csv`. "Time saved" is the ghost's travel time minus the run's, shown only when both runs arrived. Anything not recorded says *Not recorded*. A deep link opens a run directly: `/replay?run=basic_dynamic/grid4x4_x1.5_seed003`.
+- **How it was recorded:** `scripts.record_telemetry` re-ran each of those runs (SUMO is deterministic) with a passive recorder and checked 17 metrics of every re-run against its `runs.csv` row: all 88 matched. `runs.csv` was not changed.
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m scripts.record_telemetry --scales 1.5 --seeds 1-5 --traffic-seeds 1-5
+.venv\Scripts\python.exe -m scripts.record_telemetry --scales 0.75,1.0,2.0 --seeds 1-2 --traffic-seeds 1-2
+```
+
 - **Production build:** `-Prod` builds the frontend and serves it with `vite preview` on port 4173.
 - **Script blocked by policy?** Run `powershell -ExecutionPolicy Bypass -File .\start.ps1`.
 
@@ -47,6 +63,7 @@ Only the frontend port is opened; the backend stays on 127.0.0.1 behind Vite's p
 | 8 | Accident injection + automatic reroute + "route compromised" | done |
 | 9 | Experiment runner (paired seeds, arms, demand sweep), charts, OFF ghost comparison run | done |
 | 10 | Demo hardening, one-command local launcher, LAN dashboard, final verification (local Windows; no Docker, no CI/CD) | done |
+| 11 | Replay dashboard (`/replay`): recorded experiment runs played back on the real road map, with the OFF ghost, signals, routes, queues, events and a demo mode | done (on its branch, awaiting approval) |
 
 ## Prerequisites (Windows)
 
