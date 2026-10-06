@@ -102,3 +102,27 @@ describe("median", () => {
     expect(median([4, 1, 2, 3])).toBe(2.5);
   });
 });
+
+describe("pending reset", () => {
+  const ack = (id: number, reason = "simulation restarted") => ({ v: 1 as const, type: "ack" as const, id, ok: true, reason });
+
+  it("shows until the reset's own ack arrives, not another command's", () => {
+    const store = useSim.getState();
+    store.startReset(7, 1000);
+    expect(useSim.getState().pendingReset).toEqual({ id: 7, since: 1000 });
+    store.receiveReply(ack(6, "BASIC mode"));
+    expect(useSim.getState().pendingReset).not.toBeNull();
+    store.receiveReply(ack(7));
+    expect(useSim.getState().pendingReset).toBeNull();
+    expect(useSim.getState().lastReply).toMatchObject({ id: 7, reason: "simulation restarted" });
+  });
+
+  it("ends when the connection drops (the ack is lost with it)", () => {
+    useSim.getState().startReset(3, 0);
+    useSim.getState().setConnection("closed");
+    expect(useSim.getState().pendingReset).toBeNull();
+    useSim.getState().startReset(4, 0);
+    useSim.getState().setConnection("open");
+    expect(useSim.getState().pendingReset).not.toBeNull();
+  });
+});

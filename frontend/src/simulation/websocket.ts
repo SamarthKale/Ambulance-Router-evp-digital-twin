@@ -131,16 +131,21 @@ export class SimSocket {
     };
   }
 
-  /** Returns false if the socket is not open (the command is dropped, not queued). */
-  send(body: CommandBody): boolean {
+  /**
+   * Returns the command's id, so its ack can be matched (0 for drive and hello, which carry
+   * none), or null if the socket is not open (the command is dropped, not queued).
+   */
+  send(body: CommandBody): number | null {
     const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-    const message: Command =
-      body.cmd === "drive" || body.cmd === "hello"
-        ? { v: PROTOCOL_VERSION, ...body }
-        : { v: PROTOCOL_VERSION, id: this.nextId++, ...body };
+    if (!ws || ws.readyState !== WebSocket.OPEN) return null;
+    if (body.cmd === "drive" || body.cmd === "hello") {
+      ws.send(JSON.stringify({ v: PROTOCOL_VERSION, ...body } satisfies Command));
+      return 0;
+    }
+    const id = this.nextId++;
+    const message: Command = { v: PROTOCOL_VERSION, id, ...body };
     ws.send(JSON.stringify(message));
-    return true;
+    return id;
   }
 
   close(): void {

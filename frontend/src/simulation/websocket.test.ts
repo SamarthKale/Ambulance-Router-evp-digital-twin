@@ -21,6 +21,22 @@ class FakeWebSocket {
 }
 
 describe("SimSocket", () => {
+  it("returns each command's id so its ack can be matched, and null when closed", () => {
+    const sim = new SimSocket("ws://x/ws", "tab-test-0002");
+    expect(sim.send({ cmd: "reset" })).toBeNull(); // not connected yet
+    sim.connect();
+    vi.runOnlyPendingTimers();
+    const ws = FakeWebSocket.created[FakeWebSocket.created.length - 1];
+    ws.readyState = FakeWebSocket.OPEN;
+    ws.onopen?.();
+    const first = sim.send({ cmd: "reset" });
+    const second = sim.send({ cmd: "spawn_ambulance" });
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBe((first ?? 0) + 1);
+    expect(sim.send({ cmd: "drive", vehicle: "ambulance_01", control: { throttle: 1, brake: 0 } })).toBe(0);
+    sim.close();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     FakeWebSocket.created = [];
