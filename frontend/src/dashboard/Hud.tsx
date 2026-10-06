@@ -41,6 +41,9 @@ const ROLE_TEXT = {
   free: "Dispatch to take control",
 } as const;
 
+const OBSERVER_WHY =
+  "Only the screen that dispatched can reset or drive. Press Release control there, or close it (control frees 10 s later).";
+
 const TURN_LABEL = { left: "LEFT", straight: "STRAIGHT", right: "RIGHT", uturn: "U-TURN" } as const;
 const MODES: { mode: SignalMode; title: string; ready: boolean }[] = [
   { mode: "OFF", title: "Normal fixed-time signals", ready: true },
@@ -88,11 +91,15 @@ export function Hud({
       drawCalls: st.drawCalls,
       triangles: st.triangles,
       role: st.role,
+      pendingReset: st.pendingReset,
       toggleFollow: st.toggleFollow,
       setView: st.setView,
     })),
   );
   const observer = s.role === "observer";
+  const resetting = s.pendingReset !== null;
+  const locked = observer || resetting;
+  const lockedWhy = observer ? OBSERVER_WHY : resetting ? "Wait: the simulation is restarting" : undefined;
   const msg = s.curr?.msg;
   const amb = msg?.ambulance;
   const vehicle = ambulanceOf(msg);
@@ -131,7 +138,7 @@ export function Hud({
             <button
               key={mode}
               title={title}
-              disabled={!ready || observer}
+              disabled={!ready || locked}
               className={msg?.mode === mode ? "active" : ""}
               onClick={() => onMode(mode)}
             >
@@ -183,16 +190,26 @@ export function Hud({
           {msg?.ghost && <GhostLine ghost={msg.ghost} timeSaved={msg.metrics.timeSaved} />}
         </section>
 
-        {s.lastReply && (s.lastReply.type === "error" || !s.lastReply.ok || s.lastReply.reason) && (
+        {resetting && (
+          <div className="reply resetting" role="status">
+            Resetting: restarting SUMO and replaying the warm-up of traffic. The map is frozen for a few seconds.
+          </div>
+        )}
+        {observer && <div className="hud-row muted small">{OBSERVER_WHY}</div>}
+        {!resetting && s.lastReply && (s.lastReply.type === "error" || !s.lastReply.ok || s.lastReply.reason) && (
           <div className={`reply ${s.lastReply.type === "ack" && s.lastReply.ok ? "ok" : "bad"}`}>{s.lastReply.reason}</div>
         )}
 
         <div className="hud-row">
-          <button className="primary" onClick={onDispatch} disabled={observer}>
+          <button className="primary" onClick={onDispatch} disabled={locked} title={lockedWhy}>
             Dispatch ambulance
           </button>
-          <button onClick={onReset} disabled={observer}>
-            Reset
+          <button
+            onClick={onReset}
+            disabled={locked}
+            title={lockedWhy ?? "Restart the simulation (same seed) and replay the warm-up; takes a few seconds"}
+          >
+            {resetting ? "Resetting…" : "Reset"}
           </button>
           {s.view === "top" && (
             <button onClick={s.toggleFollow} className={s.follow ? "active" : ""}>
@@ -204,7 +221,7 @@ export function Hud({
           <button
             className="danger"
             onClick={onAccident}
-            disabled={observer || !msg?.route}
+            disabled={locked || !msg?.route}
             title="Block one lane of the next road on the suggested route with an accident"
           >
             Create accident
@@ -213,7 +230,7 @@ export function Hud({
             Results (R)
           </button>
           {(msg?.incidents.length ?? 0) > 0 && (
-            <button onClick={onClearAccidents} disabled={observer}>
+            <button onClick={onClearAccidents} disabled={locked}>
               Clear accidents ({msg?.incidents.length})
             </button>
           )}

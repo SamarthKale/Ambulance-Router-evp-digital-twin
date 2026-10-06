@@ -491,3 +491,8 @@ button.danger:hover:not(:disabled) {
   border-radius: 8px;
   background: #7f1d1d;
 }
+
+.reply.resetting {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}

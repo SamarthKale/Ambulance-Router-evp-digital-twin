@@ -77,8 +77,8 @@ function Simulation() {
     };
   }, [connection]);
 
-  const send = useCallback((command: CommandBody) => {
-    socket.current?.send(command);
+  const send = useCallback((command: CommandBody): number | null => {
+    return socket.current?.send(command) ?? null;
   }, []);
   useManualDrive(send, undefined, role !== "observer");
 
@@ -103,7 +103,10 @@ function Simulation() {
       <Hud
         network={network}
         onDispatch={() => send({ cmd: "spawn_ambulance" })}
-        onReset={() => send({ cmd: "reset" })}
+        onReset={() => {
+          const id = send({ cmd: "reset" });
+          if (id) useSim.getState().startReset(id, performance.now());
+        }}
         onMode={(mode) => send({ cmd: "set_mode", mode })}
         onRelease={() => send({ cmd: "release_control" })}
         onAccident={() => send({ cmd: "inject_incident", type: "accident" })}

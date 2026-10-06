@@ -480,6 +480,9 @@ export interface SimStore {
   prev: Frame | null; // the two latest ticks, for interpolation
   curr: Frame | null;
   lastReply: AckMsg | ErrorMsg | null;
+  // A reset restarts SUMO and replays the warm-up (several seconds with no ticks): the HUD shows
+  // it until that command's own ack arrives.
+  pendingReset: { id: number; since: number } | null;
   role: SessionRole; // driver lock, from the server's session messages
   keys: DriveKeys; // local key state, shown instantly in the HUD
   pendingInput: { at: number; speed: number } | null;
@@ -493,6 +496,7 @@ export interface SimStore {
   setNetwork: (network: NetworkMsg) => void;
   receiveState: (msg: StateMsg, now: number) => void;
   receiveReply: (msg: AckMsg | ErrorMsg) => void;
+  startReset: (id: number, now: number) => void;
   receiveSession: (msg: SessionMsg) => void;
   setKeys: (keys: DriveKeys, now: number) => void;
   toggleFollow: () => void;
@@ -511,6 +515,7 @@ export const useSim = create<SimStore>()((set, get) => ({
   prev: null,
   curr: null,
   lastReply: null,
+  pendingReset: null,
   role: "free",
   keys: { throttle: false, brake: false },
   pendingInput: null,
@@ -521,7 +526,8 @@ export const useSim = create<SimStore>()((set, get) => ({
   drawCalls: 0,
   triangles: 0,
 
-  setConnection: (connection) => set({ connection }),
+  // a lost connection loses the ack too: don't show "resetting" forever
+  setConnection: (connection) => set(connection === "open" ? { connection } : { connection, pendingReset: null }),
   setNetwork: (network) => set({ network }),
 
   receiveState: (msg, now) => {
@@ -544,7 +550,12 @@ export const useSim = create<SimStore>()((set, get) => ({
     set({ prev, curr: { msg, receivedAt: now }, pendingInput: pending, latencyMs: samples });
   },
 
-  receiveReply: (msg) => set({ lastReply: msg }),
+  receiveReply: (msg) => {
+    const pending = get().pendingReset;
+    const done = pending !== null && msg.type === "ack" && msg.id === pending.id;
+    set(done ? { lastReply: msg, pendingReset: null } : { lastReply: msg });
+  },
+  startReset: (id, now) => set({ pendingReset: { id, since: now } }),
   receiveSession: (msg) => set({ role: msg.role }),
 
   setKeys: (keys, now) => {
